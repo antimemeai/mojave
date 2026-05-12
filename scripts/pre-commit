@@ -1,0 +1,152 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ============================================================
+# Pre-commit hook: structural enforcement of code quality
+# Humans elide; this doesn't.
+# ============================================================
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+NC='\033[0m'
+
+FAILED=0
+
+# Collect staged files
+STAGED_RS=$(git diff --cached --name-only --diff-filter=ACM | grep '\.rs$' || true)
+STAGED_PY=$(git diff --cached --name-only --diff-filter=ACM | grep '\.py$' || true)
+STAGED_TOML=$(git diff --cached --name-only --diff-filter=ACM | grep 'Cargo\.toml$' || true)
+
+# ────────────────────────────────────────────
+# Rust checks (only if Rust files are staged)
+# ────────────────────────────────────────────
+if [ -n "$STAGED_RS" ] || [ -n "$STAGED_TOML" ]; then
+    # Find all workspace roots that contain staged files
+    RUST_ROOTS=""
+    for f in $STAGED_RS $STAGED_TOML; do
+        dir=$(dirname "$f")
+        while [ "$dir" != "." ] && [ "$dir" != "/" ]; do
+            if [ -f "$dir/Cargo.toml" ]; then
+                RUST_ROOTS="$RUST_ROOTS $dir"
+                break
+            fi
+            dir=$(dirname "$dir")
+        done
+    done
+    RUST_ROOTS=$(echo "$RUST_ROOTS" | tr ' ' '\n' | sort -u)
+
+    for root in $RUST_ROOTS; do
+        echo -e "${YELLOW}[rust]${NC} checking $root ..."
+
+        # rustfmt -- must be perfectly formatted
+        if ! cargo fmt --manifest-path "$root/Cargo.toml" -- --check 2>/dev/null; then
+            echo -e "${RED}[rust] rustfmt failed in $root${NC}"
+            echo "  Run: cargo fmt --manifest-path $root/Cargo.toml"
+            FAILED=1
+        else
+            echo -e "${GREEN}[rust] rustfmt ok${NC}"
+        fi
+
+        # clippy -- zero warnings, zero exceptions
+        if ! cargo clippy --manifest-path "$root/Cargo.toml" --all-targets --all-features -- -D warnings 2>/dev/null; then
+            echo -e "${RED}[rust] clippy failed in $root${NC}"
+            echo "  ALL warnings must be resolved. No exceptions."
+            FAILED=1
+        else
+            echo -e "${GREEN}[rust] clippy ok${NC}"
+        fi
+    done
+fi
+
+# ────────────────────────────────────────────
+# Python checks (only if Python files are staged)
+# ────────────────────────────────────────────
+if [ -n "$STAGED_PY" ]; then
+    echo -e "${YELLOW}[python]${NC} checking staged .py files ..."
+
+    # ruff format check
+    if command -v ruff &>/dev/null; then
+        if ! ruff format --check $STAGED_PY 2>/dev/null; then
+            echo -e "${RED}[python] ruff format failed${NC}"
+            echo "  Run: ruff format $STAGED_PY"
+            FAILED=1
+        else
+            echo -e "${GREEN}[python] ruff format ok${NC}"
+        fi
+
+        # ruff lint
+        if ! ruff check $STAGED_PY 2>/dev/null; then
+            echo -e "${RED}[python] ruff lint failed${NC}"
+            echo "  Run: ruff check --fix $STAGED_PY"
+            FAILED=1
+        else
+            echo -e "${GREEN}[python] ruff lint ok${NC}"
+        fi
+    else
+        echo -e "${RED}[python] ruff not found — install with: pip install ruff${NC}"
+        FAILED=1
+    fi
+
+    # mypy type checking
+    if command -v mypy &>/dev/null; then
+        if ! mypy --ignore-missing-imports $STAGED_PY 2>/dev/null; then
+            echo -e "${RED}[python] mypy failed${NC}"
+            echo "  ALL type errors must be resolved."
+            FAILED=1
+        else
+            echo -e "${GREEN}[python] mypy ok${NC}"
+        fi
+    else
+        echo -e "${YELLOW}[python] mypy not found — skipping type checks${NC}"
+    fi
+fi
+
+# ────────────────────────────────────────────
+# General checks (always run)
+# ────────────────────────────────────────────
+
+# No secrets (exclude hook scripts from self-matching)
+STAGED_ALL=$(git diff --cached --name-only --diff-filter=ACM)
+STAGED_CHECK=$(echo "$STAGED_ALL" | grep -v 'scripts/pre-commit' || true)
+if [ -n "$STAGED_CHECK" ]; then
+    SECRETS_PATTERN='(PRIVATE.KEY|password\s*=|secret\s*=|api_key\s*=|AWS_SECRET|BEGIN RSA|BEGIN OPENSSH)'
+    if echo "$STAGED_CHECK" | xargs grep -lEi "$SECRETS_PATTERN" 2>/dev/null; then
+        echo -e "${RED}[security] possible secrets detected in staged files${NC}"
+        echo "  Review flagged files before committing."
+        FAILED=1
+    fi
+fi
+
+# No .env files
+if echo "$STAGED_ALL" | grep -E '\.env$|\.env\.' 2>/dev/null; then
+    echo -e "${RED}[security] .env file staged — remove from commit${NC}"
+    FAILED=1
+fi
+
+# No large binaries (>1MB)
+for f in $STAGED_ALL; do
+    if [ -f "$f" ]; then
+        size=$(wc -c < "$f" 2>/dev/null || echo 0)
+        if [ "$size" -gt 1048576 ]; then
+            ext="${f##*.}"
+            if [[ "$ext" =~ ^(pdf|png|jpg|zip|tar|gz|bin|so|dylib|exe)$ ]]; then
+                echo -e "${RED}[size] large binary staged: $f ($(( size / 1024 ))KB)${NC}"
+                FAILED=1
+            fi
+        fi
+    fi
+done
+
+# ────────────────────────────────────────────
+# Verdict
+# ────────────────────────────────────────────
+if [ $FAILED -ne 0 ]; then
+    echo ""
+    echo -e "${RED}Pre-commit checks FAILED. Fix issues above.${NC}"
+    echo -e "Bypass (sparingly): git commit --no-verify"
+    exit 1
+fi
+
+echo -e "${GREEN}All pre-commit checks passed.${NC}"
+exit 0
