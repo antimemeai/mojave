@@ -11,7 +11,7 @@ Feature: Gwet AC1/AC2/AC3
     When I compute Gwet AC1
     Then the result is 0.84933 within 0.0001
 
-  # Gate 1: Textbook — Gwet 2014 Table 5.7 (same data, quadratic weights)
+  # Gate 1: Reference — irrCAC gwet.ac2.raw() on Table 4.1 data
   Scenario: AC2 quadratic on Gwet 3-abstractor data
     Given the Gwet 2014 Table 4.1 rating matrix
     When I compute Gwet AC2 with quadratic weights

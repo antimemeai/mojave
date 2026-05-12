@@ -36,8 +36,7 @@ For q categories with weights w_{k,l} and marginal proportions pi_k:
 
 ```
 pa = observed weighted agreement (from coincidence matrix)
-tw = sum of all weight entries / q^2
-pe = tw * sum_k[ pi_k * (1 - pi_k) ] / (q * (q - 1))    [Gwet 2008 eq. 3]
+pe = sum(all weight entries) * sum_k[ pi_k * (1 - pi_k) ] / (q * (q - 1))    [Gwet 2008 eq. 3]
 AC = (pa - pe) / (1 - pe)
 ```
 

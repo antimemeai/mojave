@@ -13,6 +13,8 @@ pub enum GwetError {
     DegenerateData,
     #[error("chance agreement pe = 1.0; AC is undefined")]
     DegeneratePe,
+    #[error("data category {0} not found in weight matrix categories")]
+    WeightCategoryMismatch(u32),
     #[error("weight error: {0}")]
     Weight(#[from] crate::categorical_agreement_weights::WeightError),
 }
@@ -54,7 +56,7 @@ pub fn ac(matrix: &RatingMatrix, weights: Option<&WeightMatrix>) -> Result<IrrRe
 
     // --- Build effective weight lookup ---
     // If weights provided, map data categories to weight matrix categories.
-    // If a data category is absent from the weight matrix, fall back to identity.
+    // Every data category must be present in the weight matrix — no silent fallback.
     let w_lookup: Vec<Vec<f64>> = if let Some(wm) = weights {
         let wm_cat_index: BTreeMap<u32, usize> = wm
             .categories
@@ -63,15 +65,19 @@ pub fn ac(matrix: &RatingMatrix, weights: Option<&WeightMatrix>) -> Result<IrrRe
             .map(|(i, &c)| (c, i))
             .collect();
 
+        // Validate: all data categories must exist in the weight matrix
+        for &dc in &cat_set {
+            if !wm_cat_index.contains_key(&dc) {
+                return Err(GwetError::WeightCategoryMismatch(dc));
+            }
+        }
+
         let mut w = vec![vec![0.0; q]; q];
         for (di, &dc) in cat_set.iter().enumerate() {
             for (dj, &dc2) in cat_set.iter().enumerate() {
-                if let (Some(&wi), Some(&wj)) = (wm_cat_index.get(&dc), wm_cat_index.get(&dc2)) {
-                    w[di][dj] = wm.weights[wi][wj];
-                } else {
-                    // Fallback: identity weight
-                    w[di][dj] = if di == dj { 1.0 } else { 0.0 };
-                }
+                let wi = wm_cat_index[&dc];
+                let wj = wm_cat_index[&dc2];
+                w[di][dj] = wm.weights[wi][wj];
             }
         }
         w
