@@ -96,3 +96,18 @@ pub struct IrrResult {
     pub n_raters: usize,
     pub metric_level: Option<MetricLevel>,
 }
+
+/// Output of the Dawid-Skene EM algorithm.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[must_use]
+pub struct DawidSkeneResult {
+    pub estimated_labels: Vec<u32>,
+    /// label_probabilities\[item\]\[class\] = P(true class = k | observations)
+    pub label_probabilities: Vec<Vec<f64>>,
+    /// confusion_matrices\[annotator\]\[true_class\]\[assigned_label\]
+    pub confusion_matrices: Vec<Vec<Vec<f64>>>,
+    pub class_priors: Vec<f64>,
+    pub n_iterations: usize,
+    pub converged: bool,
+    pub log_likelihood: f64,
+}

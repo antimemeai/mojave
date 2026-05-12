@@ -27,3 +27,7 @@ harness = false
 [[test]]
 name = "cohen_tck"
 harness = false
+
+[[test]]
+name = "dawid_skene_tck"
+harness = false
