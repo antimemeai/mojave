@@ -47,3 +47,7 @@ harness = false
 [[test]]
 name = "gwet_tck"
 harness = false
+
+[[test]]
+name = "bland_altman_tck"
+harness = false

@@ -1,3 +1,4 @@
+pub mod bland_altman;
 pub mod bootstrap;
 pub mod categorical_agreement_weights;
 pub mod cohen;
