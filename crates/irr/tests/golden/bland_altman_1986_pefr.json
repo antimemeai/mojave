@@ -1,0 +1,13 @@
+{
+  "source": "Bland & Altman 1986, 'Statistical methods for assessing agreement between two methods of clinical measurement', The Lancet, Table 1. PEFR (l/min) measured by Wright peak-flow meter and mini Wright meter.",
+  "wright": [494, 395, 516, 434, 476, 557, 413, 442, 650, 433, 417, 656, 267, 478, 178, 423, 427],
+  "mini_wright": [512, 430, 520, 428, 500, 600, 364, 380, 658, 445, 432, 626, 260, 477, 259, 350, 451],
+  "expected_mean_diff": -2.12,
+  "expected_sd_diff": 38.77,
+  "expected_lower_loa": -78.10,
+  "expected_upper_loa": 73.87,
+  "tolerance_mean": 0.5,
+  "tolerance_sd": 0.5,
+  "tolerance_loa": 1.5,
+  "notes": "mean_diff = mean(wright - mini_wright). 17 subjects. Values cross-checked via manual computation: diffs = [-18,-35,-4,6,-24,-43,49,62,-8,-12,-15,30,7,1,-81,73,-24], mean=-2.118, sd=38.766."
+}
