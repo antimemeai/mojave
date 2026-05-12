@@ -126,6 +126,7 @@ pub fn fit(
                 let mut denom = 0.0;
                 let mut numer = vec![0.0f64; n_classes];
                 for (&i, counts) in &ann_label_counts[j] {
+                    // n_total > 1 when an annotator rated the same item multiple times
                     let n_total: usize = counts.iter().sum();
                     denom += t_matrix[i][k] * n_total as f64;
                     for l in 0..n_classes {

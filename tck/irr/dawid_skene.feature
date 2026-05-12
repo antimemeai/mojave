@@ -50,6 +50,13 @@ Feature: Dawid-Skene latent-class agreement model
     When I attempt Dawid-Skene fitting
     Then I get a Dawid-Skene error about empty data
 
+  Scenario: Insufficient iterations reports non-convergence
+    Given 3 annotators on 50 items with 2 classes
+    And annotator 0 and 1 are perfect
+    And annotator 2 flips labels 30% of the time seeded at 42
+    When I fit Dawid-Skene with max 1 EM iterations
+    Then the model did not converge
+
   Scenario: Single class collapses gracefully
     Given 2 annotators on 10 items all labeled class 0
     When I fit Dawid-Skene with max 100 EM iterations

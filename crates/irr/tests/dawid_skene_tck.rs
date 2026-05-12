@@ -200,6 +200,16 @@ fn then_converged(world: &mut DsWorld) {
     );
 }
 
+#[then("the model did not converge")]
+fn then_not_converged(world: &mut DsWorld) {
+    let r = world.result.as_ref().expect("no result");
+    assert!(
+        !r.converged,
+        "model unexpectedly converged in {} iterations",
+        r.n_iterations
+    );
+}
+
 #[then("all confusion matrices are approximately identity")]
 fn then_identity_matrices(world: &mut DsWorld) {
     let r = world.result.as_ref().expect("no result");
