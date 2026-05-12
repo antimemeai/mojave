@@ -1,7 +1,8 @@
 ---
 id: BEAD-0003
 title: Build IRR (inter-rater reliability) primitives
-status: open
+status: closed
+closed: 2026-05-12
 priority: high
 created: 2026-05-11
 ---
