@@ -18,7 +18,7 @@ pub enum WeightScheme {
 }
 
 /// A square, symmetric weight matrix over a set of ordered categories.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WeightMatrix {
     /// Row-major weight values; `weights[i][j]` is the agreement weight
     /// between category `categories[i]` and category `categories[j]`.
@@ -38,6 +38,10 @@ pub enum WeightError {
     DiagonalNotOne,
     #[error("weights must be non-negative")]
     NegativeWeight,
+    #[error("off-diagonal weight exceeds 1.0")]
+    WeightOutOfRange,
+    #[error("categories must not be empty")]
+    EmptyCategories,
     #[error("dimension mismatch: {n_cats} categories but {n_weights}x{n_weights} weights")]
     DimensionMismatch { n_cats: usize, n_weights: usize },
 }
@@ -48,7 +52,8 @@ impl WeightMatrix {
     /// Build a weight matrix from a named scheme over the given categories.
     ///
     /// Categories are sorted internally; the ordering determines the distance
-    /// metric used by Linear, Quadratic, and Ordinal schemes.
+    /// metric used by Linear, Quadratic, and Ordinal schemes. Weights are
+    /// computed from the sorted rank of each category, not its numeric value.
     pub fn from_scheme(categories: &[u32], scheme: WeightScheme) -> Self {
         let mut cats: Vec<u32> = categories.to_vec();
         cats.sort_unstable();
@@ -71,10 +76,26 @@ impl WeightMatrix {
 
     /// Build a weight matrix from a user-supplied matrix.
     ///
-    /// Validates: square, symmetric (within 1e-12), diagonal = 1.0 (within 1e-12),
-    /// all entries non-negative, and dimension matches `categories.len()`.
+    /// Validates: non-empty categories, dimension match, square, symmetric
+    /// (within 1e-12), diagonal = 1.0 (within 1e-12), all entries in \[0, 1\].
     pub fn custom(categories: &[u32], weights: Vec<Vec<f64>>) -> Result<Self, WeightError> {
+        // Check empty categories first
+        let mut cats: Vec<u32> = categories.to_vec();
+        cats.sort_unstable();
+        cats.dedup();
+        if cats.is_empty() {
+            return Err(WeightError::EmptyCategories);
+        }
+
+        // Check dimension match before structural checks (#6)
         let rows = weights.len();
+        if cats.len() != rows {
+            return Err(WeightError::DimensionMismatch {
+                n_cats: cats.len(),
+                n_weights: rows,
+            });
+        }
+
         // Check square
         for (i, row) in weights.iter().enumerate() {
             if row.len() != rows {
@@ -89,27 +110,19 @@ impl WeightMatrix {
             }
         }
 
-        // Check non-negative and symmetric
+        // Check non-negative, upper-bounded, and symmetric
         for (i, row_i) in weights.iter().enumerate() {
             for (j, &w_ij) in row_i.iter().enumerate() {
                 if w_ij < -TOL {
                     return Err(WeightError::NegativeWeight);
                 }
+                if i != j && w_ij > 1.0 + TOL {
+                    return Err(WeightError::WeightOutOfRange);
+                }
                 if (w_ij - weights[j][i]).abs() > TOL {
                     return Err(WeightError::NotSymmetric);
                 }
             }
-        }
-
-        // Check dimension match
-        let mut cats: Vec<u32> = categories.to_vec();
-        cats.sort_unstable();
-        cats.dedup();
-        if cats.len() != rows {
-            return Err(WeightError::DimensionMismatch {
-                n_cats: cats.len(),
-                n_weights: rows,
-            });
         }
 
         Ok(Self {
@@ -360,5 +373,59 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn custom_rejects_weight_above_one() {
+        let w = vec![vec![1.0, 1.5], vec![1.5, 1.0]];
+        let err = WeightMatrix::custom(&[1, 2], w).unwrap_err();
+        assert!(matches!(err, WeightError::WeightOutOfRange));
+    }
+
+    #[test]
+    fn custom_rejects_empty_categories() {
+        let err = WeightMatrix::custom(&[], vec![]).unwrap_err();
+        assert!(matches!(err, WeightError::EmptyCategories));
+    }
+
+    #[test]
+    fn two_categories_all_schemes() {
+        // q=2: verify correctness of all weight schemes with the smallest
+        // non-trivial category count.
+        for scheme in [
+            WeightScheme::Identity,
+            WeightScheme::Linear,
+            WeightScheme::Quadratic,
+            WeightScheme::Ordinal,
+        ] {
+            let wm = WeightMatrix::from_scheme(&[1, 2], scheme);
+            assert_eq!(wm.weights.len(), 2, "scheme {:?}", scheme);
+            assert!(
+                (wm.weights[0][0] - 1.0).abs() < 1e-15,
+                "scheme {:?}",
+                scheme
+            );
+            assert!(
+                (wm.weights[1][1] - 1.0).abs() < 1e-15,
+                "scheme {:?}",
+                scheme
+            );
+            // Symmetry
+            assert!(
+                (wm.weights[0][1] - wm.weights[1][0]).abs() < 1e-15,
+                "scheme {:?}",
+                scheme
+            );
+        }
+        // q=2, denom=1 for linear/quadratic → off-diagonal = 0
+        let lin = WeightMatrix::from_scheme(&[1, 2], WeightScheme::Linear);
+        assert!((lin.weights[0][1] - 0.0).abs() < 1e-15);
+
+        let quad = WeightMatrix::from_scheme(&[1, 2], WeightScheme::Quadratic);
+        assert!((quad.weights[0][1] - 0.0).abs() < 1e-15);
+
+        // q=2, ordinal: n_between=2, (1*2)/(2*1) = 1 → w=0
+        let ord = WeightMatrix::from_scheme(&[1, 2], WeightScheme::Ordinal);
+        assert!((ord.weights[0][1] - 0.0).abs() < 1e-15);
     }
 }
