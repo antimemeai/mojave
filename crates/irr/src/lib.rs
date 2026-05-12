@@ -1,4 +1,5 @@
 pub mod bootstrap;
+pub mod categorical_agreement_weights;
 pub mod cohen;
 pub mod dawid_skene;
 pub mod family_stratification;
