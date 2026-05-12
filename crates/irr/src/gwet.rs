@@ -25,6 +25,9 @@ pub enum GwetError {
 /// - `weights = Some(wm)` → AC2 or AC3 depending on whether the weight
 ///   matrix matches a standard scheme (identity, linear, quadratic, ordinal).
 ///
+/// Items with fewer than 2 raters are excluded from agreement computation
+/// but included in marginal proportion estimation, following irrCAC convention.
+///
 /// Reference: Gwet (2008) "Computing inter-rater reliability and its variance
 /// in the presence of high agreement", eq. 3.
 pub fn ac(matrix: &RatingMatrix, weights: Option<&WeightMatrix>) -> Result<IrrResult, GwetError> {
@@ -178,7 +181,7 @@ pub fn ac(matrix: &RatingMatrix, weights: Option<&WeightMatrix>) -> Result<IrrRe
         value: ac_value,
         ci_lower: None,
         ci_upper: None,
-        n_items: n_usable,
+        n_items: matrix.n_items(),
         n_raters: matrix.n_raters(),
         metric_level,
     })

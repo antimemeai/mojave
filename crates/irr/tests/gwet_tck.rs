@@ -224,6 +224,11 @@ fn given_all_same(world: &mut GwetWorld, n_items: usize, cat: u32, n_raters: usi
     });
 }
 
+#[given("a weight matrix for only categories 0 and 1")]
+fn given_partial_weights(world: &mut GwetWorld) {
+    world.custom_weights = Some(WeightMatrix::from_scheme(&[0, 1], WeightScheme::Quadratic));
+}
+
 #[given("a custom 3x3 weight matrix")]
 fn given_custom_weights(world: &mut GwetWorld) {
     let w = vec![
@@ -304,6 +309,16 @@ fn when_attempt_ac1(world: &mut GwetWorld) {
     let m = world.matrix.as_ref().expect("no matrix");
     match gwet::ac(m, None) {
         Ok(r) => world.ac1_result = Some(r.value),
+        Err(e) => world.error = Some(e.to_string()),
+    }
+}
+
+#[when("I attempt Gwet AC2 with the partial weights")]
+fn when_attempt_ac2_partial(world: &mut GwetWorld) {
+    let m = world.matrix.as_ref().expect("no matrix");
+    let wm = world.custom_weights.as_ref().expect("no partial weights");
+    match gwet::ac(m, Some(wm)) {
+        Ok(r) => world.ac2_result = Some(r.value),
         Err(e) => world.error = Some(e.to_string()),
     }
 }

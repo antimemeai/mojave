@@ -69,6 +69,13 @@ Feature: Gwet AC1/AC2/AC3
     When I attempt Gwet AC1
     Then I get a Gwet error containing "pe"
 
+  # Edge: weight matrix doesn't cover data categories
+  Scenario: Weight matrix missing data category is an error
+    Given a mixed-agreement 2-rater matrix seeded at 55
+    And a weight matrix for only categories 0 and 1
+    When I attempt Gwet AC2 with the partial weights
+    Then I get a Gwet error containing "not found"
+
   # AC3: custom weights with warning
   Scenario: AC3 with custom weight matrix
     Given a mixed-agreement 2-rater matrix seeded at 55
