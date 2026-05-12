@@ -97,6 +97,35 @@ pub struct IrrResult {
     pub metric_level: Option<MetricLevel>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum RelatednessRegime {
+    SameFamily,
+    CrossFamily,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PlsPair {
+    pub model_i: String,
+    pub model_j: String,
+    pub pls: f64,
+    pub regime: RelatednessRegime,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RegimeMean {
+    pub regime: RelatednessRegime,
+    pub mean_pls: f64,
+    pub n_pairs: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[must_use]
+pub struct PreferenceLeakageResult {
+    pub pls_scores: Vec<PlsPair>,
+    pub regime_means: Vec<RegimeMean>,
+    pub global_mean_pls: f64,
+}
+
 /// Output of the Dawid-Skene EM algorithm.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[must_use]

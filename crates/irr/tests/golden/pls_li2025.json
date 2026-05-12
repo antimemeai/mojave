@@ -1,0 +1,72 @@
+{
+  "source": "Hand-computed from Li et al. 2025, equations 5-6 (ICLR 2026)",
+  "formula": "PLS(i,j) = [(WR(i,i)-AVG(i,j))/AVG(i,j) + (WR(j,j)-AVG(j,i))/AVG(j,i)] / 2, where AVG(i,j) = [WR(i,i)+WR(i,j)]/2",
+  "examples": [
+    {
+      "name": "symmetric_3x3",
+      "description": "3 models with identical self-bias. All diag=0.6, off-diag=0.4.",
+      "models": ["A", "B", "C"],
+      "win_rates": [
+        [0.6, 0.4, 0.4],
+        [0.4, 0.6, 0.4],
+        [0.4, 0.4, 0.6]
+      ],
+      "family_map": {"A": "fam-a", "B": "fam-b", "C": "fam-c"},
+      "expected_pairs": [
+        {"i": "A", "j": "B", "pls": 0.2, "regime": "CrossFamily"},
+        {"i": "A", "j": "C", "pls": 0.2, "regime": "CrossFamily"},
+        {"i": "B", "j": "C", "pls": 0.2, "regime": "CrossFamily"}
+      ],
+      "tolerance": 0.0001,
+      "derivation": "AVG(i,j)=[0.6+0.4]/2=0.5; term=(0.6-0.5)/0.5=0.2; PLS=(0.2+0.2)/2=0.2"
+    },
+    {
+      "name": "asymmetric_2x2",
+      "description": "2 models with different self-bias magnitudes. Tests AVG(i,j) != AVG(j,i).",
+      "models": ["X", "Y"],
+      "win_rates": [
+        [0.8, 0.4],
+        [0.6, 0.9]
+      ],
+      "family_map": {"X": "fam-x", "Y": "fam-y"},
+      "expected_pairs": [
+        {"i": "X", "j": "Y", "pls": 0.26667, "regime": "CrossFamily"}
+      ],
+      "tolerance": 0.001,
+      "derivation": "AVG(X,Y)=[0.8+0.4]/2=0.6, AVG(Y,X)=[0.9+0.6]/2=0.75; term_X=(0.8-0.6)/0.6=1/3, term_Y=(0.9-0.75)/0.75=1/5; PLS=(1/3+1/5)/2=(8/15)/2=4/15≈0.26667"
+    },
+    {
+      "name": "negative_2x2",
+      "description": "2 models where cross-judge rates exceed self-judge rates (anti-leakage).",
+      "models": ["P", "Q"],
+      "win_rates": [
+        [0.4, 0.6],
+        [0.7, 0.3]
+      ],
+      "family_map": {"P": "fam-p", "Q": "fam-q"},
+      "expected_pairs": [
+        {"i": "P", "j": "Q", "pls": -0.3, "regime": "CrossFamily"}
+      ],
+      "tolerance": 0.0001,
+      "derivation": "AVG(P,Q)=[0.4+0.6]/2=0.5, AVG(Q,P)=[0.3+0.7]/2=0.5; term_P=(0.4-0.5)/0.5=-0.2, term_Q=(0.3-0.5)/0.5=-0.4; PLS=(-0.2+-0.4)/2=-0.3"
+    },
+    {
+      "name": "same_family_3x3",
+      "description": "3 models where M1,M2 share a family. Same-family judges inflate cross-judge rates (0.6 vs 0.4 cross-family), producing lower SameFamily PLS than CrossFamily PLS.",
+      "models": ["M1", "M2", "M3"],
+      "win_rates": [
+        [0.8, 0.6, 0.4],
+        [0.6, 0.8, 0.4],
+        [0.4, 0.4, 0.8]
+      ],
+      "family_map": {"M1": "alpha", "M2": "alpha", "M3": "beta"},
+      "expected_pairs": [
+        {"i": "M1", "j": "M2", "pls": 0.14286, "regime": "SameFamily"},
+        {"i": "M1", "j": "M3", "pls": 0.33333, "regime": "CrossFamily"},
+        {"i": "M2", "j": "M3", "pls": 0.33333, "regime": "CrossFamily"}
+      ],
+      "tolerance": 0.001,
+      "derivation": "SameFamily: AVG(M1,M2)=[0.8+0.6]/2=0.7; term=(0.8-0.7)/0.7=1/7; PLS=1/7≈0.14286. CrossFamily: AVG(M1,M3)=[0.8+0.4]/2=0.6; term=(0.8-0.6)/0.6=1/3; PLS=1/3≈0.33333."
+    }
+  ]
+}

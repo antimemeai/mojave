@@ -31,3 +31,7 @@ harness = false
 [[test]]
 name = "dawid_skene_tck"
 harness = false
+
+[[test]]
+name = "preference_leakage_tck"
+harness = false
