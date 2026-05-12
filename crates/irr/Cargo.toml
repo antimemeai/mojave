@@ -19,3 +19,11 @@ rand = "0.9"
 [[test]]
 name = "krippendorff_tck"
 harness = false
+
+[[test]]
+name = "fleiss_tck"
+harness = false
+
+[[test]]
+name = "cohen_tck"
+harness = false
