@@ -1,0 +1,24 @@
+{
+  "source": "irrCAC R package cac.raw4raters dataset. 12 subjects, 4 raters, 5 categories, with missing data. Based on Krippendorff 2011 reliability data with a 4th rater added.",
+  "n_items": 12,
+  "n_raters": 4,
+  "n_categories": 5,
+  "data": [
+    [1, 1, null, 1],
+    [2, 2, 3, 2],
+    [3, 3, 3, 3],
+    [3, 3, 3, 3],
+    [2, 2, 2, 2],
+    [1, 2, 3, 4],
+    [4, 4, 4, 4],
+    [1, 1, 2, 1],
+    [2, 2, 2, 2],
+    [null, 5, 5, 5],
+    [null, null, 1, 1],
+    [null, null, 3, null]
+  ],
+  "expected_gwet_ac1": 0.77544,
+  "tolerance": 0.001,
+  "reference_impl": "irrCAC R package (Gwet), gwet.ac1.raw(cac.raw4raters)",
+  "notes": "AC1 value of 0.77544 verified against irrCAC R package vignette output."
+}
