@@ -39,7 +39,7 @@ crates/
       krippendorff.rs               # Krippendorff α (all metric levels)
       fleiss.rs                     # Fleiss κ
       cohen.rs                      # Cohen κ / weighted κ
-      gwet.rs                       # Gwet AC1/AC2
+      gwet.rs                       # Gwet AC1/AC2  ⚠️ no task covers this — deferred
       dawid_skene.rs                # Hierarchical Dawid-Skene EM
       preference_leakage.rs         # PLS (Li et al. 2025)
       family_stratification.rs      # Judge-family stratified α
@@ -509,6 +509,10 @@ name = "inspect_adapter_tck"
 harness = false
 ```
 
+**⚠️ ISSUE: Inspect `.eval` format is NOT plain JSON with a top-level `samples` array. Must research actual format before writing adapter + fixtures. Current structs and fixtures are speculative.**
+
+**⚠️ ISSUE: `jsonl.rs` listed in file tree but no task implements it. Deferred to future task.**
+
 - [ ] **Step 4: Define the IngestAdapter trait and error types**
 
 ```rust
@@ -709,6 +713,7 @@ fn default_family_map() -> BTreeMap<String, String> {
     m
 }
 
+// ⚠️ ISSUE: timestamps should come from the eval log, not ingestion time
 fn chrono_now_unix() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -1882,6 +1887,8 @@ pub mod cohen;
 pub use types::*;
 ```
 
+**⚠️ ISSUE: No `cohen.feature` TCK file. Cohen κ needs its own Gherkin spec and test harness.**
+
 - [ ] **Step 5: Write Fleiss TCK test harness, run tests**
 
 Run: `cargo test -p irr`
@@ -2207,6 +2214,10 @@ Feature: Preference Leakage Score and family stratification
     And the bias-burden indicator is > 0.1
 ```
 
+**⚠️ ISSUE: PLS formula uses `win_rates[i][i]` (self-judge diagonal). Re-read Li 2025 before implementing — the formula measures judge bias toward *related* models, not self-evaluation. Current implementation likely wrong.**
+
+**⚠️ ISSUE: `RelatednessRegime::Inheritance` variant is never assigned — only SameModel/SameFamily/CrossFamily are reachable.**
+
 - [ ] **Step 2: Implement PLS**
 
 ```rust
@@ -2302,6 +2313,8 @@ pub fn compute_pls(
     })
 }
 ```
+
+**⚠️ ISSUE: Between-family alpha picks one arbitrary representative per family. This gives agreement among a random subset, not between-family agreement. Need a proper cross-family pairing approach.**
 
 - [ ] **Step 3: Implement family-stratified alpha**
 
@@ -2573,10 +2586,10 @@ fn main() {
         }
     }
 
+    // ⚠️ ISSUE: Demo should actually call IRR functions, not stub.
+    // At minimum: Krippendorff α on multi-scorer data to prove pipeline.
     println!("\n--- IRR (if multi-scorer) ---");
-    // If we have multiple scorers per task, compute agreement
-    // (simplified: this demo shows the pipeline works end-to-end)
-    println!("  [full IRR computation available via irr crate]");
+    println!("  [TODO: wire up actual IRR computation]");
 
     println!("\n=== End Integrity Diff ===");
 }
