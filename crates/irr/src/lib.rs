@@ -1,6 +1,7 @@
 pub mod bootstrap;
 pub mod cohen;
 pub mod dawid_skene;
+pub mod family_stratification;
 pub mod fleiss;
 pub mod krippendorff;
 pub mod preference_leakage;

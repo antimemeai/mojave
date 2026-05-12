@@ -39,3 +39,7 @@ harness = false
 [[test]]
 name = "bootstrap_tck"
 harness = false
+
+[[test]]
+name = "family_stratification_tck"
+harness = false
