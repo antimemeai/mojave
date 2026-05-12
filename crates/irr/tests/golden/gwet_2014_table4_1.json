@@ -1,0 +1,16 @@
+{
+  "source": "Gwet 2014, Handbook of Inter-Rater Reliability, 4th ed., Table 4.1. 100 pregnant women classified by 2 abstractors into 3 pregnancy types (Ectopic, AIU, NIU).",
+  "n_items": 100,
+  "n_categories": 3,
+  "category_labels": ["Ectopic", "AIU", "NIU"],
+  "confusion_matrix": [
+    [13, 0, 0],
+    [0, 20, 4],
+    [0, 7, 56]
+  ],
+  "expected_ac1": 0.84933,
+  "expected_ac2_quadratic": 0.94024,
+  "tolerance": 0.0001,
+  "reference_impl": "irrCAC R package (Gwet), gwet.ac1.raw() and gwet.ac2.raw()",
+  "notes": "AC1 uses identity weights. AC2(quadratic) uses quadratic agreement weights. Same underlying data as cohen_gwet2014_3x3.json."
+}
