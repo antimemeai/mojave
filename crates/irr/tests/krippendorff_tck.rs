@@ -232,6 +232,6 @@ fn assert_degenerate(world: &mut KrippendorffWorld) {
 }
 
 fn main() {
-    let runner = KrippendorffWorld::run("../../tck/irr");
+    let runner = KrippendorffWorld::run(concat!(env!("CARGO_MANIFEST_DIR"), "/../../tck/irr"));
     futures::executor::block_on(runner);
 }

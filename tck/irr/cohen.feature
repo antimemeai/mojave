@@ -2,6 +2,24 @@ Feature: Cohen kappa
   Two-rater agreement beyond chance — unweighted and weighted.
   Reference: Cohen (1960) "A coefficient of agreement for nominal scales"
 
+  # Gate 1: Textbook reproduction — unweighted
+  Scenario: Cohen 1960 worked example (unweighted)
+    Given the Cohen golden dataset "cohen_1960.json"
+    When I compute Cohen kappa
+    Then Cohen kappa is approximately 0.6528 with tolerance 0.001
+
+  # Gate 1: Textbook reproduction — linear weighted
+  Scenario: Cohen 1960 worked example (linear weighted)
+    Given the Cohen golden dataset "cohen_1960.json"
+    When I compute Cohen weighted kappa with linear weights
+    Then Cohen kappa is approximately 0.6649 with tolerance 0.001
+
+  # Gate 1: Textbook reproduction — quadratic weighted
+  Scenario: Cohen 1960 worked example (quadratic weighted)
+    Given the Cohen golden dataset "cohen_1960.json"
+    When I compute Cohen weighted kappa with quadratic weights
+    Then Cohen kappa is approximately 0.6759 with tolerance 0.001
+
   # Gate 3: Property — perfect agreement
   Scenario: Perfect agreement yields kappa = 1.0
     Given two raters who agree perfectly on 20 items across 3 categories
@@ -21,22 +39,12 @@ Feature: Cohen kappa
     And I swap the raters and compute Cohen kappa again
     Then both Cohen kappa values are identical
 
-  # Weighted kappa
-  Scenario: Linear weighted kappa on ordinal data
+  # Gate 3: Property — weighted symmetry
+  Scenario: Weighted kappa is symmetric in raters
     Given two raters on a 5-point scale with 30 items seeded at 77
     When I compute Cohen weighted kappa with linear weights
-    Then Cohen kappa is a finite number
-
-  Scenario: Quadratic weighted kappa on ordinal data
-    Given two raters on a 5-point scale with 30 items seeded at 77
-    When I compute Cohen weighted kappa with quadratic weights
-    Then Cohen kappa is a finite number
-
-  Scenario: Weighted kappa >= unweighted kappa for ordinal disagreement
-    Given two raters on a 5-point scale with 30 items seeded at 77
-    When I compute Cohen kappa
-    And I compute Cohen weighted kappa with linear weights
-    Then weighted kappa is greater than or equal to unweighted kappa
+    And I swap the raters and compute Cohen weighted kappa with linear weights again
+    Then both Cohen kappa values are identical
 
   # Edge cases
   Scenario: Empty data is an error
@@ -48,3 +56,8 @@ Feature: Cohen kappa
     Given rater1 with 10 items and rater2 with 8 items
     When I compute Cohen kappa
     Then I get a Cohen error about unequal length
+
+  Scenario: All-same-category is degenerate
+    Given two raters who both assign category 0 to all 20 items
+    When I compute Cohen kappa
+    Then I get a Cohen error about degenerate data

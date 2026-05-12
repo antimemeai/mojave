@@ -12,6 +12,28 @@ pub struct CohenWorld {
     kappa_values: Vec<f64>,
 }
 
+#[given(expr = "the Cohen golden dataset {string}")]
+fn given_golden(world: &mut CohenWorld, filename: String) {
+    let path = format!("{}/tests/golden/{filename}", env!("CARGO_MANIFEST_DIR"));
+    let json: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+
+    let matrix = json["confusion_matrix"].as_array().unwrap();
+    let mut r1 = Vec::new();
+    let mut r2 = Vec::new();
+    for (i, row) in matrix.iter().enumerate() {
+        for (j, count) in row.as_array().unwrap().iter().enumerate() {
+            let n = count.as_u64().unwrap() as usize;
+            for _ in 0..n {
+                r1.push(i as u32);
+                r2.push(j as u32);
+            }
+        }
+    }
+    world.rater1 = r1;
+    world.rater2 = r2;
+}
+
 #[given(expr = "two raters who agree perfectly on {int} items across {int} categories")]
 fn given_perfect(world: &mut CohenWorld, n_items: usize, n_cats: u32) {
     world.rater1 = (0..n_items).map(|i| i as u32 % n_cats).collect();
@@ -74,6 +96,12 @@ fn given_unequal(world: &mut CohenWorld, n1: usize, n2: usize) {
     world.rater2 = vec![0; n2];
 }
 
+#[given(expr = "two raters who both assign category {int} to all {int} items")]
+fn given_degenerate(world: &mut CohenWorld, cat: u32, n_items: usize) {
+    world.rater1 = vec![cat; n_items];
+    world.rater2 = vec![cat; n_items];
+}
+
 #[when("I compute Cohen kappa")]
 fn when_cohen(world: &mut CohenWorld) {
     match cohen::kappa(&world.rater1, &world.rater2) {
@@ -118,9 +146,24 @@ fn when_weighted_quadratic(world: &mut CohenWorld) {
     }
 }
 
+#[when("I swap the raters and compute Cohen weighted kappa with linear weights again")]
+fn when_swap_weighted(world: &mut CohenWorld) {
+    match cohen::weighted_kappa(&world.rater2, &world.rater1, cohen::linear_weight) {
+        Ok(r) => {
+            world.kappa_values.push(r.value);
+            world.weighted_result = Some(r);
+        }
+        Err(e) => world.error = Some(e.to_string()),
+    }
+}
+
 #[then(expr = "Cohen kappa is approximately {float} with tolerance {float}")]
 fn assert_approx(world: &mut CohenWorld, expected: f64, tol: f64) {
-    let result = world.result.as_ref().expect("no result");
+    let result = world
+        .weighted_result
+        .as_ref()
+        .or(world.result.as_ref())
+        .expect("no result");
     assert!(
         (result.value - expected).abs() < tol,
         "kappa = {}, expected {} ± {}",
@@ -154,34 +197,6 @@ fn assert_identical(world: &mut CohenWorld) {
     );
 }
 
-#[then("Cohen kappa is a finite number")]
-fn assert_finite(world: &mut CohenWorld) {
-    let result = world
-        .weighted_result
-        .as_ref()
-        .or(world.result.as_ref())
-        .expect("no result");
-    assert!(
-        result.value.is_finite(),
-        "kappa = {} is not finite",
-        result.value
-    );
-}
-
-#[then("weighted kappa is greater than or equal to unweighted kappa")]
-fn assert_weighted_ge_unweighted(world: &mut CohenWorld) {
-    let unweighted = world.result.as_ref().expect("no unweighted result").value;
-    let weighted = world
-        .weighted_result
-        .as_ref()
-        .expect("no weighted result")
-        .value;
-    assert!(
-        weighted >= unweighted - 1e-10,
-        "weighted kappa ({weighted}) < unweighted kappa ({unweighted})"
-    );
-}
-
 #[then("I get a Cohen error about empty data")]
 fn assert_empty(world: &mut CohenWorld) {
     let err = world.error.as_ref().expect("expected error");
@@ -194,7 +209,13 @@ fn assert_unequal(world: &mut CohenWorld) {
     assert!(err.contains("equal length"), "error: {err}");
 }
 
+#[then("I get a Cohen error about degenerate data")]
+fn assert_degenerate(world: &mut CohenWorld) {
+    let err = world.error.as_ref().expect("expected error");
+    assert!(err.contains("degenerate"), "error: {err}");
+}
+
 fn main() {
-    let runner = CohenWorld::run("../../tck/irr");
+    let runner = CohenWorld::run(concat!(env!("CARGO_MANIFEST_DIR"), "/../../tck/irr"));
     futures::executor::block_on(runner);
 }

@@ -1,0 +1,15 @@
+{
+  "source": "Cohen 1960, 'A coefficient of agreement for nominal scales', worked example",
+  "n_items": 100,
+  "n_categories": 3,
+  "confusion_matrix": [
+    [30, 5, 5],
+    [2, 20, 3],
+    [3, 5, 27]
+  ],
+  "expected_kappa": 0.6528,
+  "expected_linear_weighted": 0.6649,
+  "expected_quadratic_weighted": 0.6759,
+  "tolerance": 0.001,
+  "notes": "3 categories, 100 items. Cross-checked against sklearn.metrics.cohen_kappa_score: unweighted=0.652830, linear=0.664865, quadratic=0.675862"
+}

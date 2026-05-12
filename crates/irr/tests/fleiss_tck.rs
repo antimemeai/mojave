@@ -20,6 +20,35 @@ fn make_matrix(data: Vec<Vec<Option<u32>>>) -> RatingMatrix {
     }
 }
 
+#[given(expr = "the Fleiss golden dataset {string}")]
+fn given_golden(world: &mut FleissWorld, filename: String) {
+    let path = format!("{}/tests/golden/{filename}", env!("CARGO_MANIFEST_DIR"));
+    let json: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+
+    let counts = json["category_counts"].as_array().unwrap();
+    let n_raters = json["n_raters"].as_u64().unwrap() as usize;
+
+    let mut data: Vec<Vec<Option<u32>>> = Vec::new();
+    for row in counts {
+        let cat_counts: Vec<usize> = row
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_u64().unwrap() as usize)
+            .collect();
+        let mut ratings = Vec::with_capacity(n_raters);
+        for (cat, &count) in cat_counts.iter().enumerate() {
+            for _ in 0..count {
+                ratings.push(Some(cat as u32));
+            }
+        }
+        assert_eq!(ratings.len(), n_raters);
+        data.push(ratings);
+    }
+    world.matrix = Some(make_matrix(data));
+}
+
 #[given(
     expr = "a Fleiss matrix where all {int} raters agree on each of {int} items across {int} categories"
 )]
@@ -59,6 +88,22 @@ fn given_missing(world: &mut FleissWorld) {
     let data = vec![
         vec![Some(1), Some(2), None],
         vec![Some(2), Some(2), Some(1)],
+    ];
+    world.matrix = Some(make_matrix(data));
+}
+
+#[given("a Fleiss matrix with 1 rater")]
+fn given_single_rater(world: &mut FleissWorld) {
+    let data = vec![vec![Some(0)], vec![Some(1)], vec![Some(2)]];
+    world.matrix = Some(make_matrix(data));
+}
+
+#[given("a Fleiss matrix where all raters assign the same category")]
+fn given_degenerate(world: &mut FleissWorld) {
+    let data = vec![
+        vec![Some(0), Some(0), Some(0)],
+        vec![Some(0), Some(0), Some(0)],
+        vec![Some(0), Some(0), Some(0)],
     ];
     world.matrix = Some(make_matrix(data));
 }
@@ -136,7 +181,19 @@ fn assert_missing_error(world: &mut FleissWorld) {
     assert!(err.contains("missing"), "error: {err}");
 }
 
+#[then("I get a Fleiss error about insufficient raters")]
+fn assert_insufficient_raters(world: &mut FleissWorld) {
+    let err = world.error.as_ref().expect("expected error");
+    assert!(err.contains("at least 2 raters"), "error: {err}");
+}
+
+#[then("I get a Fleiss error about degenerate data")]
+fn assert_degenerate(world: &mut FleissWorld) {
+    let err = world.error.as_ref().expect("expected error");
+    assert!(err.contains("degenerate"), "error: {err}");
+}
+
 fn main() {
-    let runner = FleissWorld::run("../../tck/irr");
+    let runner = FleissWorld::run(concat!(env!("CARGO_MANIFEST_DIR"), "/../../tck/irr"));
     futures::executor::block_on(runner);
 }

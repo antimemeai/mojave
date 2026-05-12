@@ -6,6 +6,8 @@ pub enum CohenError {
     EmptyData,
     #[error("ratings must have equal length ({0} vs {1})")]
     UnequalLength(usize, usize),
+    #[error("degenerate data: all ratings in a single category")]
+    DegenerateData,
 }
 
 pub fn kappa(rater1: &[u32], rater2: &[u32]) -> Result<IrrResult, CohenError> {
@@ -38,11 +40,11 @@ pub fn kappa(rater1: &[u32], rater2: &[u32]) -> Result<IrrResult, CohenError> {
         })
         .sum();
 
-    let kappa_val = if (1.0 - p_e).abs() < 1e-15 {
-        1.0
-    } else {
-        (p_o - p_e) / (1.0 - p_e)
-    };
+    if (1.0 - p_e).abs() < 1e-15 {
+        return Err(CohenError::DegenerateData);
+    }
+
+    let kappa_val = (p_o - p_e) / (1.0 - p_e);
 
     Ok(IrrResult {
         statistic_name: "cohen_kappa".to_string(),
@@ -58,7 +60,7 @@ pub fn kappa(rater1: &[u32], rater2: &[u32]) -> Result<IrrResult, CohenError> {
 pub fn weighted_kappa(
     rater1: &[u32],
     rater2: &[u32],
-    weight_fn: fn(u32, u32) -> f64,
+    weight_fn: impl Fn(u32, u32) -> f64,
 ) -> Result<IrrResult, CohenError> {
     if rater1.is_empty() {
         return Err(CohenError::EmptyData);
@@ -73,7 +75,6 @@ pub fn weighted_kappa(
     categories.sort();
     categories.dedup();
 
-    // Observed weighted disagreement
     let w_o: f64 = rater1
         .iter()
         .zip(rater2.iter())
@@ -81,23 +82,23 @@ pub fn weighted_kappa(
         .sum::<f64>()
         / n;
 
-    // Expected weighted disagreement
     let w_e: f64 = categories
         .iter()
         .flat_map(|&ci| {
+            let wf = &weight_fn;
             categories.iter().map(move |&cj| {
                 let p1 = rater1.iter().filter(|&&r| r == ci).count() as f64 / n;
                 let p2 = rater2.iter().filter(|&&r| r == cj).count() as f64 / n;
-                p1 * p2 * weight_fn(ci, cj)
+                p1 * p2 * wf(ci, cj)
             })
         })
         .sum();
 
-    let kappa_val = if w_e.abs() < 1e-15 {
-        1.0
-    } else {
-        1.0 - w_o / w_e
-    };
+    if w_e.abs() < 1e-15 {
+        return Err(CohenError::DegenerateData);
+    }
+
+    let kappa_val = 1.0 - w_o / w_e;
 
     Ok(IrrResult {
         statistic_name: "weighted_cohen_kappa".to_string(),

@@ -1,11 +1,16 @@
 use crate::types::{IrrResult, MetricLevel, RatingMatrix};
+use std::collections::BTreeMap;
 
 #[derive(Debug, thiserror::Error)]
 pub enum FleissError {
     #[error("empty rating matrix")]
     EmptyData,
+    #[error("Fleiss kappa requires at least 2 raters, got {0}")]
+    InsufficientRaters(usize),
     #[error("Fleiss kappa requires complete data (no missing values)")]
     MissingData,
+    #[error("degenerate data: all ratings in a single category")]
+    DegenerateData,
 }
 
 pub fn kappa(matrix: &RatingMatrix) -> Result<IrrResult, FleissError> {
@@ -16,7 +21,10 @@ pub fn kappa(matrix: &RatingMatrix) -> Result<IrrResult, FleissError> {
     let n = matrix.n_items();
     let k = matrix.n_raters();
 
-    // Find all distinct categories, reject missing
+    if k < 2 {
+        return Err(FleissError::InsufficientRaters(k));
+    }
+
     let mut categories: Vec<u32> = Vec::new();
     for row in &matrix.ratings {
         for val in row.iter() {
@@ -33,19 +41,22 @@ pub fn kappa(matrix: &RatingMatrix) -> Result<IrrResult, FleissError> {
     categories.sort();
     let q = categories.len();
 
-    // n_ij = number of raters who assigned category j to item i
+    let cat_idx: BTreeMap<u32, usize> = categories
+        .iter()
+        .enumerate()
+        .map(|(i, &v)| (v, i))
+        .collect();
+
     let mut n_matrix = vec![vec![0usize; q]; n];
     for (i, row) in matrix.ratings.iter().enumerate() {
         for v in row.iter().flatten() {
-            let j = categories.iter().position(|c| c == v).unwrap();
-            n_matrix[i][j] += 1;
+            n_matrix[i][cat_idx[v]] += 1;
         }
     }
 
     let kf = k as f64;
     let nf = n as f64;
 
-    // P_i = (1 / k(k-1)) * (sum_j n_ij² - k)
     let p_i: Vec<f64> = n_matrix
         .iter()
         .map(|row| {
@@ -56,7 +67,6 @@ pub fn kappa(matrix: &RatingMatrix) -> Result<IrrResult, FleissError> {
 
     let p_bar: f64 = p_i.iter().sum::<f64>() / nf;
 
-    // p_j = proportion of all assignments to category j
     let p_j: Vec<f64> = (0..q)
         .map(|j| {
             let count: f64 = n_matrix.iter().map(|row| row[j] as f64).sum();
@@ -66,11 +76,11 @@ pub fn kappa(matrix: &RatingMatrix) -> Result<IrrResult, FleissError> {
 
     let p_e: f64 = p_j.iter().map(|p| p * p).sum();
 
-    let kappa_val = if (1.0 - p_e).abs() < 1e-15 {
-        1.0
-    } else {
-        (p_bar - p_e) / (1.0 - p_e)
-    };
+    if (1.0 - p_e).abs() < 1e-15 {
+        return Err(FleissError::DegenerateData);
+    }
+
+    let kappa_val = (p_bar - p_e) / (1.0 - p_e);
 
     Ok(IrrResult {
         statistic_name: "fleiss_kappa".to_string(),
