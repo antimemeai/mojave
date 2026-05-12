@@ -8,6 +8,12 @@ Feature: Fleiss kappa
     When I compute Fleiss kappa
     Then kappa is approximately 0.2099 with tolerance 0.001
 
+  # Gate 2: Cross-check against irrCAC (Gwet 2014)
+  Scenario: Gwet gender dataset (unweighted) matches irrCAC
+    Given the Fleiss golden dataset "fleiss_gwet2014_gender.json"
+    When I compute Fleiss kappa
+    Then kappa is approximately 0.129 with tolerance 0.001
+
   # Gate 3: Property — perfect agreement
   Scenario: Perfect agreement yields kappa = 1.0
     Given a Fleiss matrix where all 4 raters agree on each of 20 items across 3 categories

@@ -35,6 +35,14 @@ struct GoldenDataset {
     prior_tolerance: f64,
 }
 
+#[derive(serde::Deserialize)]
+struct CrowdKitGolden {
+    triples: Vec<(String, String, u32)>,
+    expected_labels: Vec<u32>,
+    expected_priors: Vec<f64>,
+    prior_tolerance: f64,
+}
+
 #[given("the Dawid-Skene 1979 golden dataset")]
 fn given_golden(world: &mut DsWorld) {
     let path = concat!(
@@ -66,6 +74,27 @@ fn given_golden(world: &mut DsWorld) {
 
     world.golden_labels = Some(data.expected_labels);
     world.golden_priors = Some(data.expected_marginal_priors);
+    world.golden_prior_tolerance = data.prior_tolerance;
+}
+
+#[given("the crowd-kit YSDA golden dataset")]
+fn given_crowdkit(world: &mut DsWorld) {
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/golden/dawid_skene_crowdkit.json"
+    );
+    let data: CrowdKitGolden =
+        serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+
+    for (item_id, annotator_id, label) in &data.triples {
+        world.triples.push(AnnotationTriple {
+            item_id: item_id.clone(),
+            annotator_id: annotator_id.clone(),
+            label: *label,
+        });
+    }
+    world.golden_labels = Some(data.expected_labels);
+    world.golden_priors = Some(data.expected_priors);
     world.golden_prior_tolerance = data.prior_tolerance;
 }
 
@@ -247,6 +276,35 @@ fn then_golden_labels(world: &mut DsWorld) {
         &r.estimated_labels, expected,
         "estimated labels do not match Dawid-Skene 1979 Table 4"
     );
+}
+
+#[then("the estimated labels match the crowd-kit expected labels")]
+fn then_crowdkit_labels(world: &mut DsWorld) {
+    let r = world.result.as_ref().expect("no result");
+    let expected = world
+        .golden_labels
+        .as_ref()
+        .expect("no golden labels loaded");
+    assert_eq!(
+        &r.estimated_labels, expected,
+        "estimated labels do not match crowd-kit"
+    );
+}
+
+#[then("the class priors match the crowd-kit expected priors")]
+fn then_crowdkit_priors(world: &mut DsWorld) {
+    let r = world.result.as_ref().expect("no result");
+    let expected = world
+        .golden_priors
+        .as_ref()
+        .expect("no golden priors loaded");
+    let tol = world.golden_prior_tolerance;
+    for (k, (&actual, &exp)) in r.class_priors.iter().zip(expected.iter()).enumerate() {
+        assert!(
+            (actual - exp).abs() < tol,
+            "class prior[{k}] = {actual}, expected {exp} ± {tol}"
+        );
+    }
 }
 
 #[then("the class priors match the 1979 paper Table 2")]

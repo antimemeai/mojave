@@ -20,6 +20,37 @@ Feature: Cohen kappa
     When I compute Cohen weighted kappa with quadratic weights
     Then Cohen kappa is approximately 0.6759 with tolerance 0.001
 
+  # Gate 2: Cross-check against irrCAC (Gwet 2014)
+  Scenario: Gwet 3x3 abstractors (unweighted) matches irrCAC
+    Given the Cohen golden dataset "cohen_gwet2014_3x3.json"
+    When I compute Cohen kappa
+    Then Cohen kappa is approximately 0.796 with tolerance 0.001
+
+  Scenario: Gwet 3x3 abstractors (linear weighted) matches irrCAC
+    Given the Cohen golden dataset "cohen_gwet2014_3x3.json"
+    When I compute Cohen weighted kappa with linear weights
+    Then Cohen kappa is approximately 0.843 with tolerance 0.001
+
+  Scenario: Gwet 3x3 abstractors (quadratic weighted) matches irrCAC
+    Given the Cohen golden dataset "cohen_gwet2014_3x3.json"
+    When I compute Cohen weighted kappa with quadratic weights
+    Then Cohen kappa is approximately 0.892 with tolerance 0.001
+
+  Scenario: Gwet 4x4 diagnosis (unweighted) matches irrCAC
+    Given the Cohen golden dataset "cohen_gwet2014_4x4.json"
+    When I compute Cohen kappa
+    Then Cohen kappa is approximately 0.432 with tolerance 0.001
+
+  Scenario: Gwet 4x4 diagnosis (linear weighted) matches irrCAC
+    Given the Cohen golden dataset "cohen_gwet2014_4x4.json"
+    When I compute Cohen weighted kappa with linear weights
+    Then Cohen kappa is approximately 0.407 with tolerance 0.001
+
+  Scenario: Gwet 4x4 diagnosis (quadratic weighted) matches irrCAC
+    Given the Cohen golden dataset "cohen_gwet2014_4x4.json"
+    When I compute Cohen weighted kappa with quadratic weights
+    Then Cohen kappa is approximately 0.383 with tolerance 0.001
+
   # Gate 3: Property — perfect agreement
   Scenario: Perfect agreement yields kappa = 1.0
     Given two raters who agree perfectly on 20 items across 3 categories

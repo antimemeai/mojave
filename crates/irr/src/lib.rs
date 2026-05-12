@@ -1,3 +1,4 @@
+pub mod bootstrap;
 pub mod cohen;
 pub mod dawid_skene;
 pub mod fleiss;

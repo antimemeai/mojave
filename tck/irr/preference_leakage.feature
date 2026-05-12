@@ -26,6 +26,10 @@ Feature: Preference Leakage Score (Li et al. 2025)
     When I compute PLS
     Then each PLS value matches the golden expected value
 
+  # Gate 2: No standalone PLS library exists. Cross-check is via independent
+  # Python reimplementation of eq 5-6, confirmed matching all 8 golden pairs.
+  # The Gate 1 golden scenarios above serve double duty as the cross-check.
+
   # Gate 3: Property — zero PLS when no bias
   Scenario: Zero PLS when all win rates are equal
     Given 3 models with uniform win rates of 0.5

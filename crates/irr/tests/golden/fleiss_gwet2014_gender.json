@@ -1,0 +1,27 @@
+{
+  "source": "Gwet (2014), 15 subjects rated by 4 raters on a 3-point scale. Cross-checked against irrCAC Python v1.0, CAC(data, digits=3).fleiss().",
+  "n_raters": 4,
+  "n_items": 15,
+  "n_categories": 3,
+  "category_labels": ["a", "b", "c"],
+  "category_counts": [
+    [3, 0, 1],
+    [2, 1, 1],
+    [2, 1, 1],
+    [2, 0, 2],
+    [3, 1, 0],
+    [3, 1, 0],
+    [0, 4, 0],
+    [0, 3, 1],
+    [0, 0, 4],
+    [3, 0, 1],
+    [2, 1, 1],
+    [2, 1, 1],
+    [2, 0, 2],
+    [3, 1, 0],
+    [3, 1, 0]
+  ],
+  "expected_kappa": 0.129,
+  "tolerance": 0.001,
+  "reference_impl": "irrCAC Python, CAC(raw_gender(), digits=3).fleiss()"
+}

@@ -1,0 +1,16 @@
+{
+  "source": "Gwet (2014), 100 pregnant women classified by 2 abstractors into 3 pregnancy types. Cross-checked against irrCAC Python v1.0 (kgwet/irrCAC).",
+  "n_items": 100,
+  "n_categories": 3,
+  "category_labels": ["Ectopic", "AIU", "NIU"],
+  "confusion_matrix": [
+    [13, 0, 0],
+    [0, 20, 4],
+    [0, 7, 56]
+  ],
+  "expected_kappa": 0.796,
+  "expected_linear_weighted": 0.843,
+  "expected_quadratic_weighted": 0.892,
+  "tolerance": 0.001,
+  "reference_impl": "irrCAC Python, CAC(table, digits=3).cohen()"
+}

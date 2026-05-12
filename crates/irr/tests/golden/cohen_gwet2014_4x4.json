@@ -1,0 +1,17 @@
+{
+  "source": "Gwet (2014), 223 psychiatric patients classified by 2 diagnosis methods into 4 disorders. Cross-checked against irrCAC Python v1.0 (kgwet/irrCAC).",
+  "n_items": 223,
+  "n_categories": 4,
+  "category_labels": ["Schizophrenia", "Bipolar Disorder", "Depression", "Other"],
+  "confusion_matrix": [
+    [40, 4, 4, 17],
+    [6, 25, 2, 13],
+    [4, 1, 21, 12],
+    [15, 5, 9, 45]
+  ],
+  "expected_kappa": 0.432,
+  "expected_linear_weighted": 0.407,
+  "expected_quadratic_weighted": 0.383,
+  "tolerance": 0.001,
+  "reference_impl": "irrCAC Python, CAC(table, digits=3).cohen()"
+}

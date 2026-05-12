@@ -1,0 +1,15 @@
+{
+  "source": "Toloka crowd-kit YSDA toy dataset. Cross-checked against crowdkit.aggregation.DawidSkene (n_iter=100, tol=1e-10).",
+  "label_map": {"no": 0, "yes": 1},
+  "triples": [
+    ["t1", "w1", 0], ["t2", "w1", 1], ["t3", "w1", 1], ["t4", "w1", 1], ["t5", "w1", 1],
+    ["t1", "w2", 1], ["t2", "w2", 1], ["t3", "w2", 0], ["t4", "w2", 1], ["t5", "w2", 0],
+    ["t2", "w3", 1], ["t3", "w3", 0], ["t4", "w3", 1], ["t5", "w3", 0],
+    ["t1", "w4", 1], ["t2", "w4", 0], ["t3", "w4", 1], ["t4", "w4", 1], ["t5", "w4", 0],
+    ["t1", "w5", 0], ["t2", "w5", 0], ["t3", "w5", 0], ["t4", "w5", 1], ["t5", "w5", 0]
+  ],
+  "expected_labels": [1, 1, 0, 1, 0],
+  "expected_label_order": ["t1", "t2", "t3", "t4", "t5"],
+  "expected_priors": [0.4, 0.6],
+  "prior_tolerance": 0.05
+}

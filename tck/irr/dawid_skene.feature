@@ -10,6 +10,14 @@ Feature: Dawid-Skene latent-class agreement model
     And the estimated labels match the 1979 paper Table 4
     And the class priors match the 1979 paper Table 2
 
+  # Gate 2: Cross-check against crowd-kit (Toloka)
+  Scenario: Crowd-kit YSDA toy dataset matches crowd-kit labels and priors
+    Given the crowd-kit YSDA golden dataset
+    When I fit Dawid-Skene with max 100 EM iterations
+    Then the model converged
+    And the estimated labels match the crowd-kit expected labels
+    And the class priors match the crowd-kit expected priors
+
   # Gate 3: Property — perfect annotators
   Scenario: Perfect annotators yield identity confusion matrices
     Given 3 annotators who all agree perfectly on 20 items with 3 classes
