@@ -6,11 +6,11 @@ Longitudinal SPC for agent evaluation. Surfaces measurement-quality questions de
 
 ## Core Questions (the product surface)
 
-1. "How reliable is your scoring?" → noise floor via G-theory variance decomposition
+1. "How reliable is your scoring?" → noise floor via mixed-effects variance decomposition (G-theory reframed)
 2. "Do your judges agree?" → IRR statistics (BYO supported)
 3. "Which tasks are doing work?" → IRT item diagnostics (Python/torch_measure)
-4. "What's actually driving your scores?" → sensitivity analysis (Sobol indices)
-5. "Can you stop early?" → sequential testing (SPRT, group-sequential)
+4. "What's actually driving your scores?" → sensitivity/influence attribution (Sobol indices, Shapley effects)
+5. "Can you stop early?" → sequential testing (SPRT, group-sequential, anytime-valid inference)
 6. "Are some tasks redundant?" → factor models (Python/torch_measure)
 
 ## Architecture
@@ -47,11 +47,17 @@ Existing saltelli-* crates restructured for publication. Contains:
 
 Status: math complete, needs repack/rename/publish-readiness assessment.
 
+Design note (per sky Claude research critique): Shapley effects (Owen 2014, Iooss et al. 2021)
+should be the recommended default for categorical-input designs (model, judge, prompt variant).
+Standard Sobol indices require a prior over categorical levels and the interpretation degenerates
+when levels aren't exchangeable. Sobol remains the default for continuous hyperparameter sweeps.
+Existing Shapley estimator in crate covers this — surface it prominently in the API.
+
 #### irr (new build)
 
 Inter-rater reliability statistics.
 
-Methods:
+Methods (classical):
 - Krippendorff α (nominal, ordinal, interval, ratio — explicit level= required, no default)
 - Fleiss κ (multi-rater nominal)
 - Cohen κ / weighted κ (2-rater)
@@ -59,30 +65,44 @@ Methods:
 - Bland-Altman limits of agreement
 - Bootstrap CIs for all
 
+Methods (modern — additive, per sky Claude research critique):
+- Dawid-Skene latent-class agreement model (jointly estimates latent truth + judge confusion)
+- Judge-family stratified α (within-family minus between-family = bias-burden indicator)
+- Human anchor calibration requirement (flag when absent)
+
 Key design constraints:
 - Must handle missing data (not all raters rate all items)
 - Must expose paradox behavior clearly (high agreement + low κ)
 - No silent defaults on metric level
+- Must surface shared-source-of-error (LLM judges from same family inflate agreement)
 
-Reference impls: R irr, irrCAC (Gwet), kripp.alpha
+Reference impls: R irr, irrCAC (Gwet), kripp.alpha, Dawid-Skene (Paun et al. 2018 NLP extension)
 
 #### seq-test (new build)
 
 Sequential testing for early stopping with controlled error.
 
-Methods:
+Methods (classical):
 - Wald SPRT (binary + continuous outcomes)
 - Pocock boundaries
 - O'Brien-Fleming boundaries
 - Lan-DeMets α-spending (flexible timing)
 - Bias-adjusted estimators at stopping time (Siegmund 1985)
 
+Methods (modern — additive, per sky Claude research critique):
+- Confidence sequences (Howard-Ramdas-McAuliffe-Sekhon 2021)
+- E-processes / e-values (Ramdas-Grünwald-Vovk-Shafer, Statistical Science 2023)
+- Anytime-valid conversion of fixed-sample tests (Koolen et al. JRSS B 2025)
+- E-value merging for multi-stream monitoring (no union bounds needed)
+
 Key design constraints:
 - Must report bias-adjusted estimates, not raw MLE at stopping
 - Degenerate cases (H0=H1) must error explicitly
 - Information-time scaling must be correct
+- Anytime-valid methods handle arbitrary peeking and non-i.i.d. observations
+- Classical SPRT available but documented re: i.i.d. assumption
 
-Reference impls: R gsDesign (FDA-blessed), rpact
+Reference impls: R gsDesign (FDA-blessed), rpact, SAVI R packages (Ramdas group)
 
 #### reliability (new build)
 
@@ -110,14 +130,21 @@ Components:
 - Canonical serialization of analysis plans (deterministic hashing)
 - Hash-anchored plan documents (SHA-256, any single-byte change → different hash)
 - Deviation detector (compares executed analysis to registered plan)
-- ICH E9 R1 estimand structure adapted to eval context
 - Version chaining (each revision references predecessor's hash)
+
+Governance layer stack (per sky Claude research critique — layered, not monolithic):
+- NIST AI RMF 1.0 + Generative AI Profile (AI 600-1) as governance scaffold
+- Mitchell model cards / Gebru datasheets for artifact description
+- Kapoor/Narayanan Agentic Benchmark Checklist (ABC) for agent-eval pre-reg
+- ICH E9(R1) estimand framework as optional layer (for FDA/clinical/actuarial customers)
+- Hash-anchored plans as the cryptographic substrate across all layers
 
 Key design constraints:
 - Comment/whitespace insensitive hashing (pre-reg must not be brittle)
 - No silent type coercion in plan parsing
 - Round-trip: parse(emit(parse(x))) == parse(x)
 - Must work without the other math crates (contract enforcer, not numerics)
+- Estimand vocabulary available but not forced — right tool for regulated contexts
 
 ### Orchestration Layer (Rust)
 
@@ -161,10 +188,14 @@ Produces: statistically efficient ablation schedule
 
 #### results-collector
 
-- Gathers outcomes from completed runs
+- Runner-agnostic ingest layer: clean trait defining what eval results look like
+- Inspect (UK AISI) adapter ships out of the box — first-class, works immediately
+- Customer eval runners implement the same trait — no privileged runner
 - Maps results to the change×task matrix
 - Feeds data to math binaries (sensitivity analysis, IRR, sequential boundaries)
 - Maintains temporal history for SPC
+
+See BEAD-0015 for design details.
 
 #### state-manager
 
