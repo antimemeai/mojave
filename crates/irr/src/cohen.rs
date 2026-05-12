@@ -73,6 +73,9 @@ pub fn kappa(rater1: &[u32], rater2: &[u32]) -> Result<IrrResult, CohenError> {
 
 /// Compute Cohen's weighted kappa for two-rater ordinal agreement.
 ///
+/// The weight function must be a *disagreement* metric: `weight(a, a) == 0`
+/// for all `a`, with larger values indicating greater disagreement.
+///
 /// Reference: Cohen (1968) "Weighted kappa: nominal scale agreement
 /// with provision for scaled disagreement or partial credit."
 pub fn weighted_kappa(

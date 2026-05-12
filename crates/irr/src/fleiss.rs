@@ -33,16 +33,13 @@ pub fn kappa(matrix: &RatingMatrix) -> Result<IrrResult, FleissError> {
     for row in &matrix.ratings {
         for val in row.iter() {
             match val {
-                Some(v) => {
-                    if !categories.contains(v) {
-                        categories.push(*v);
-                    }
-                }
+                Some(v) => categories.push(*v),
                 None => return Err(FleissError::MissingData),
             }
         }
     }
     categories.sort();
+    categories.dedup();
     let q = categories.len();
 
     let cat_idx: BTreeMap<u32, usize> = categories
