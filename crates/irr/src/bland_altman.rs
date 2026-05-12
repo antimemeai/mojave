@@ -41,6 +41,10 @@ pub enum BlandAltmanError {
     /// All differences are identical (zero variance), so LoA are undefined.
     #[error("zero variance in differences")]
     ZeroVariance,
+
+    /// One or more input values are NaN or infinity.
+    #[error("inputs must be finite (no NaN or infinity)")]
+    NonFiniteInput,
 }
 
 /// Compute Bland-Altman limits of agreement for paired measurements.
@@ -58,6 +62,7 @@ pub enum BlandAltmanError {
 /// # Errors
 /// - [`BlandAltmanError::LengthMismatch`] if `x.len() != y.len()`.
 /// - [`BlandAltmanError::TooFewObservations`] if `n < 2`.
+/// - [`BlandAltmanError::NonFiniteInput`] if any value is NaN or infinity.
 /// - [`BlandAltmanError::ZeroVariance`] if all differences are equal.
 pub fn agreement(x: &[f64], y: &[f64]) -> Result<BlandAltmanResult, BlandAltmanError> {
     let len_x = x.len();
@@ -72,6 +77,10 @@ pub fn agreement(x: &[f64], y: &[f64]) -> Result<BlandAltmanResult, BlandAltmanE
         return Err(BlandAltmanError::TooFewObservations);
     }
 
+    if x.iter().chain(y.iter()).any(|v| !v.is_finite()) {
+        return Err(BlandAltmanError::NonFiniteInput);
+    }
+
     // Compute differences
     let diffs: Vec<f64> = x.iter().zip(y.iter()).map(|(xi, yi)| xi - yi).collect();
 
@@ -82,7 +91,7 @@ pub fn agreement(x: &[f64], y: &[f64]) -> Result<BlandAltmanResult, BlandAltmanE
     // Sample variance (n-1 denominator)
     let var: f64 = diffs.iter().map(|d| (d - mean_diff).powi(2)).sum::<f64>() / (n as f64 - 1.0);
 
-    if var < 1e-15 {
+    if var.abs() < 1e-15 {
         return Err(BlandAltmanError::ZeroVariance);
     }
 
