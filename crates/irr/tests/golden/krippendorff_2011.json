@@ -1,0 +1,21 @@
+{
+  "source": "Krippendorff 2011, 'Computing Krippendorff's alpha-reliability', Table 1",
+  "metric_level": "nominal",
+  "data": [
+    [1, 1, null],
+    [2, 2, 3],
+    [3, 3, 3],
+    [3, 3, 3],
+    [2, 2, 2],
+    [1, 2, 3],
+    [4, 4, 4],
+    [1, 1, 2],
+    [2, 2, 2],
+    [null, 5, 5],
+    [null, null, 1],
+    [null, null, 3]
+  ],
+  "expected_alpha": 0.6753,
+  "tolerance": 0.001,
+  "notes": "12 items, 3 raters, 5 categories, with missing data. Cross-checked against Python krippendorff 0.8.2: 0.6752577319587629"
+}
