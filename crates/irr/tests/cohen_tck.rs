@@ -1,6 +1,6 @@
 use cucumber::{given, then, when, World};
 use irr::cohen;
-use irr::types::IrrResult;
+use irr::types::{IrrResult, MetricLevel};
 
 #[derive(Debug, Default, World)]
 pub struct CohenWorld {
@@ -126,7 +126,12 @@ fn when_swap(world: &mut CohenWorld) {
 
 #[when("I compute Cohen weighted kappa with linear weights")]
 fn when_weighted_linear(world: &mut CohenWorld) {
-    match cohen::weighted_kappa(&world.rater1, &world.rater2, cohen::linear_weight) {
+    match cohen::weighted_kappa(
+        &world.rater1,
+        &world.rater2,
+        cohen::linear_weight,
+        MetricLevel::Ordinal,
+    ) {
         Ok(r) => {
             world.kappa_values.push(r.value);
             world.weighted_result = Some(r);
@@ -137,7 +142,12 @@ fn when_weighted_linear(world: &mut CohenWorld) {
 
 #[when("I compute Cohen weighted kappa with quadratic weights")]
 fn when_weighted_quadratic(world: &mut CohenWorld) {
-    match cohen::weighted_kappa(&world.rater1, &world.rater2, cohen::quadratic_weight) {
+    match cohen::weighted_kappa(
+        &world.rater1,
+        &world.rater2,
+        cohen::quadratic_weight,
+        MetricLevel::Ordinal,
+    ) {
         Ok(r) => {
             world.kappa_values.push(r.value);
             world.weighted_result = Some(r);
@@ -148,7 +158,12 @@ fn when_weighted_quadratic(world: &mut CohenWorld) {
 
 #[when("I swap the raters and compute Cohen weighted kappa with linear weights again")]
 fn when_swap_weighted(world: &mut CohenWorld) {
-    match cohen::weighted_kappa(&world.rater2, &world.rater1, cohen::linear_weight) {
+    match cohen::weighted_kappa(
+        &world.rater2,
+        &world.rater1,
+        cohen::linear_weight,
+        MetricLevel::Ordinal,
+    ) {
         Ok(r) => {
             world.kappa_values.push(r.value);
             world.weighted_result = Some(r);

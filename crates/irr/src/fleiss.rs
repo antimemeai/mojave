@@ -13,6 +13,10 @@ pub enum FleissError {
     DegenerateData,
 }
 
+/// Compute Fleiss' kappa for multi-rater nominal agreement.
+///
+/// Reference: Fleiss (1971) "Measuring nominal scale agreement
+/// among many raters." Requires complete data (no missing values).
 pub fn kappa(matrix: &RatingMatrix) -> Result<IrrResult, FleissError> {
     if matrix.n_items() == 0 {
         return Err(FleissError::EmptyData);
