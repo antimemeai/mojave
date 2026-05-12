@@ -1,7 +1,7 @@
 ---
 id: BEAD-0001
 title: Set up language-specific pre-commit hooks
-status: open
+status: closed
 priority: high
 created: 2026-05-11
 ---
