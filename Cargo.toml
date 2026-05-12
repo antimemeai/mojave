@@ -3,4 +3,22 @@ resolver = "2"
 members = [
     "crates/eval-core",
     "crates/irr",
+    "crates/metric-tck-harness",
+    "crates/salib-cli",
+    "crates/salib-core",
+    "crates/salib-estimators",
+    "crates/salib-samplers",
+    "crates/salib-shapley",
+    "crates/salib-surrogate",
+    "crates/salib-validation",
 ]
+
+[workspace.package]
+edition = "2021"
+rust-version = "1.87"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/patrickbeam/evals"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"

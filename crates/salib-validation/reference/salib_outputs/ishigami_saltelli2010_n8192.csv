@@ -1,0 +1,12 @@
+# SALib reference values for Ishigami canonical (a=7, b=0.1) at N=8192.
+# Sample matrix: SALib radial Saltelli design (calc_second_order=False).
+# Estimator: SALib sobol.analyze (Saltelli 2010 first-order + Jansen 1999 total-order).
+# N (samples per matrix half) = 8192. Total evaluations = N(d+2) = 40960.
+# Numpy RNG seed = 42.
+# SALib version = (no __version__ attr; latest from pip)
+# Tolerance regime: MC-noise (within k/sqrt(N) of analytic ≈ 0.011 at N=8192).
+# Per decisions/2026-04-28-saltelli-tck-posture.md Layer 3.
+factor,S,S_conf,ST,ST_conf
+x1,0.3158569125,0.0177199016,0.5580215581,0.0314727298
+x2,0.4424194420,0.0179023186,0.4424263482,0.0142416584
+x3,0.0020850628,0.0200933723,0.2438569100,0.0095456322

@@ -1,0 +1,23 @@
+[package]
+name = "metric-tck-harness"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Workspace test helpers — homegrown Gherkin parser + SyncRunner for TCK harnesses, ported verbatim from substrate's firecrew-test::gherkin (2026-04-28). Dev-dependency only."
+
+# Dep invariant: other Workspace crates MUST declare this only in
+# `[dev-dependencies]`, never in `[dependencies]`. Mirrors substrate's
+# firecrew-test invariant (substrate enforces via grep workflow). A
+# Workspace equivalent grep-lint lands when crate count justifies it.
+#
+# Pure stdlib for the gherkin module — no external deps. Helper
+# modules (proptest_strategies / chaos / spawn / fixtures equivalent)
+# will accumulate deps as they land; for now this crate is gherkin-only.
+
+[dependencies]
+
+[lints]
+workspace = true

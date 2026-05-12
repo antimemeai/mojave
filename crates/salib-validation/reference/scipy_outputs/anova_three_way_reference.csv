@@ -1,0 +1,9 @@
+component,variance_fraction
+data,0.39370078740157555
+brittleness,0.141732283464567
+inference,0.0629921259842521
+data_brittleness,0.25196850393700776
+data_inference,0.035433070866141746
+brittleness_inference,0.015748031496062923
+data_brittleness_inference,0.09842519685039375
+residual,0.0

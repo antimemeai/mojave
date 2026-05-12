@@ -1,0 +1,33 @@
+[package]
+name = "salib-validation"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = """
+salib-rs sensitivity analysis — analytic test functions and
+SALib differential reference data. Hosts the canonical battery
+(Ishigami, Sobol' G, Sobol' G*, Bratley, Morris-test, Borgonovo bimodal,
+linear-k, Oakley-O'Hagan), each with its closed-form analytic indices
+module, plus frozen SALib outputs for differential parity. Dependency-
+free except `salib-core`. Per
+`decisions/2026-04-28-saltelli-tck-posture.md` Layer 3 (frozen CSVs)
+and Layer 1's named-test-function discipline.
+"""
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+salib-core = { path = "../salib-core" }
+
+[dev-dependencies]
+# Outer Gherkin TCK harness — feature files under
+# `tck/saltelli/validation/features/` are wired against
+# `metric_tck_harness::gherkin::SyncRunner`.
+metric-tck-harness = { path = "../metric-tck-harness" }
+
+[lints]
+workspace = true

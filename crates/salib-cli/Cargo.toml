@@ -1,0 +1,31 @@
+[package]
+name = "salib-cli"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = """
+salib-rs sensitivity-analysis — operator-facing CLI.
+A `salib` binary with `sample` / `run` / `analyze` subcommands; thin
+shell over the salib library crates.
+"""
+
+[[bin]]
+name = "salib"
+path = "src/main.rs"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+salib-core = { path = "../salib-core" }
+salib-samplers = { path = "../salib-samplers" }
+salib-estimators = { path = "../salib-estimators" }
+salib-validation = { path = "../salib-validation" }
+
+[dev-dependencies]
+
+[lints]
+workspace = true

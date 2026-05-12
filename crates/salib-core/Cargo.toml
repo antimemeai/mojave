@@ -1,0 +1,51 @@
+[package]
+name = "salib-core"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = """
+salib-rs sensitivity analysis — foundational types.
+Owns `Problem`, `Factor`, the closed `Distribution` enum, `RngState`
+(multi-stream ChaCha20 + deterministic salt-derived forking), the
+`tree_sum` / `tree_dot` / `tree_var` reduction primitives, and
+saltelli-internal errors. No samplers, no estimators, no
+no external deps. Per `decisions/2026-04-28-saltelli-where-and-naming.md`
+and `decisions/2026-04-28-saltelli-rng-determinism.md`.
+"""
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+# Determinism foundation — RNG + reductions.
+rand = { version = "0.9", default-features = false }
+rand_chacha = { version = "0.9", default-features = false }
+sha2 = { version = "0.10", default-features = false }
+serde = { version = "1", features = ["derive"] }
+rayon = "1"
+
+# Distribution inverse-CDFs (Normal / LogNormal / Beta / Gamma) —
+# closed-form not available; statrs provides Newton-converged
+# `ContinuousCDF::inverse_cdf`. Closed-form variants (Uniform,
+# Triangular, Weibull, Exponential, Bernoulli, DiscreteUniform) are
+# implemented in salib-core directly.
+statrs = "0.18"
+
+# Canonical-JSON serialization for `Problem::content_hash` (SHA-256
+# over the canonical-JSON bytes).
+serde_json = "1"
+
+# `BuildError` — fallible `ProblemBuilder::build`.
+thiserror = "2"
+
+[dev-dependencies]
+# Outer Gherkin TCK harness — feature files under
+# `tck/saltelli/{rng-determinism,problem}/features/` are wired
+# against `metric_tck_harness::gherkin::SyncRunner`.
+metric-tck-harness = { path = "../metric-tck-harness" }
+
+[lints]
+workspace = true
