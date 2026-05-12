@@ -15,6 +15,7 @@ cucumber = "0.21"
 futures = "0.3"
 proptest = "1"
 approx = "0.5"
+rand_distr = "0.5"
 
 [[test]]
 name = "krippendorff_tck"
