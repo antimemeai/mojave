@@ -2,6 +2,14 @@ Feature: Dawid-Skene latent-class agreement model
   EM algorithm jointly estimating latent truth and per-annotator confusion matrices.
   Reference: Dawid & Skene (1979); Paun et al. (2018) Section 2.2.
 
+  # Gate 1: Textbook — Dawid & Skene 1979 Table 1
+  Scenario: Reproduces Dawid-Skene 1979 paper results
+    Given the Dawid-Skene 1979 golden dataset
+    When I fit Dawid-Skene with max 100 EM iterations
+    Then the model converged
+    And the estimated labels match the 1979 paper Table 4
+    And the class priors match the 1979 paper Table 2
+
   # Gate 3: Property — perfect annotators
   Scenario: Perfect annotators yield identity confusion matrices
     Given 3 annotators who all agree perfectly on 20 items with 3 classes

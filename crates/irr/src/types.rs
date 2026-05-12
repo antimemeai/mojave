@@ -110,4 +110,6 @@ pub struct DawidSkeneResult {
     pub n_iterations: usize,
     pub converged: bool,
     pub log_likelihood: f64,
+    pub annotator_ids: Vec<String>,
+    pub class_labels: Vec<u32>,
 }

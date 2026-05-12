@@ -5,20 +5,20 @@
 /// Dawid-Skene EM latent-class model for annotation aggregation.
 ///
 /// Jointly estimates latent true labels and per-annotator K×K confusion
-/// matrices via expectation-maximization.
+/// matrices via expectation-maximization. Supports repeated annotations
+/// (the same annotator may rate the same item multiple times).
 ///
 /// Reference: Dawid & Skene (1979); Paun et al. (2018) Section 2.2.
 use crate::types::{AnnotationTriple, DawidSkeneResult};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, thiserror::Error)]
 pub enum DawidSkeneError {
     #[error("empty annotation data")]
     EmptyData,
-    #[error("failed to converge after {0} iterations")]
-    NotConverged(usize),
 }
 
+#[derive(Debug, Clone)]
 pub struct DawidSkeneConfig {
     pub max_iterations: usize,
     pub tolerance: f64,
@@ -43,37 +43,47 @@ pub fn fit(
 
     let mut item_map: BTreeMap<&str, usize> = BTreeMap::new();
     let mut ann_map: BTreeMap<&str, usize> = BTreeMap::new();
-    let mut class_map: BTreeMap<u32, usize> = BTreeMap::new();
+    let mut class_set: BTreeSet<u32> = BTreeSet::new();
 
     for t in triples {
         let next = item_map.len();
         item_map.entry(&t.item_id).or_insert(next);
         let next = ann_map.len();
         ann_map.entry(&t.annotator_id).or_insert(next);
-        let next = class_map.len();
-        class_map.entry(t.label).or_insert(next);
+        class_set.insert(t.label);
     }
 
     let n_items = item_map.len();
     let n_annotators = ann_map.len();
-    let n_classes = class_map.len();
-
-    let mut classes: Vec<u32> = class_map.keys().copied().collect();
-    classes.sort();
+    let classes: Vec<u32> = class_set.into_iter().collect();
+    let n_classes = classes.len();
     let class_idx: BTreeMap<u32, usize> =
         classes.iter().enumerate().map(|(i, &c)| (c, i)).collect();
 
-    // Build annotation lookup: item -> [(annotator_idx, class_idx)]
+    // Per-item annotations for E-step likelihood computation
     let mut annotations: Vec<Vec<(usize, usize)>> = vec![Vec::new(); n_items];
+    // Per-annotator label counts for single-pass M-step (eq 2.3 from paper)
+    // ann_label_counts[j] = { item_idx → counts_per_class }
+    let mut ann_label_counts: Vec<BTreeMap<usize, Vec<usize>>> =
+        vec![BTreeMap::new(); n_annotators];
+
     for t in triples {
         let i = item_map[t.item_id.as_str()];
         let j = ann_map[t.annotator_id.as_str()];
         let k = class_idx[&t.label];
         annotations[i].push((j, k));
+        let counts = ann_label_counts[j]
+            .entry(i)
+            .or_insert_with(|| vec![0usize; n_classes]);
+        counts[k] += 1;
     }
 
-    // Initialize T via majority vote
-    // T[i][k] = P(true class of item i = k)
+    let mut annotator_ids: Vec<(usize, String)> =
+        ann_map.iter().map(|(&k, &v)| (v, k.to_string())).collect();
+    annotator_ids.sort_by_key(|(idx, _)| *idx);
+    let annotator_ids: Vec<String> = annotator_ids.into_iter().map(|(_, s)| s).collect();
+
+    // Initialize T via majority vote (eq 3.1)
     let mut t_matrix = vec![vec![0.0f64; n_classes]; n_items];
     for (i, anns) in annotations.iter().enumerate() {
         let mut counts = vec![0usize; n_classes];
@@ -93,7 +103,6 @@ pub fn fit(
     }
 
     let mut class_priors = vec![1.0 / n_classes as f64; n_classes];
-
     // pi[j][k][l] = P(annotator j says l | true class = k)
     let mut pi = vec![vec![vec![0.0f64; n_classes]; n_classes]; n_annotators];
 
@@ -104,35 +113,28 @@ pub fn fit(
     for iter in 0..config.max_iterations {
         n_iter = iter + 1;
 
-        // --- M-step ---
+        // --- M-step (eqs 2.3, 2.4) ---
 
-        // Update class priors: π_k = (1/I) Σ_i T[i][k]
+        // Update class priors: p_j = (1/I) Σ_i T[i][j]
         for k in 0..n_classes {
             class_priors[k] = t_matrix.iter().map(|t| t[k]).sum::<f64>() / n_items as f64;
         }
 
-        // Update confusion matrices
+        // Update confusion matrices using precomputed per-annotator label counts
         for j in 0..n_annotators {
             for k in 0..n_classes {
-                // Denominator: Σ_i T[i][k] for items where annotator j provided a label
-                let denom: f64 = annotations
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, anns)| anns.iter().any(|&(aj, _)| aj == j))
-                    .map(|(i, _)| t_matrix[i][k])
-                    .sum();
-
+                let mut denom = 0.0;
+                let mut numer = vec![0.0f64; n_classes];
+                for (&i, counts) in &ann_label_counts[j] {
+                    let n_total: usize = counts.iter().sum();
+                    denom += t_matrix[i][k] * n_total as f64;
+                    for l in 0..n_classes {
+                        numer[l] += t_matrix[i][k] * counts[l] as f64;
+                    }
+                }
                 for l in 0..n_classes {
-                    // Numerator: Σ_i T[i][k] * I(annotator j labeled item i as l)
-                    let numer: f64 = annotations
-                        .iter()
-                        .enumerate()
-                        .filter(|(_, anns)| anns.iter().any(|&(aj, al)| aj == j && al == l))
-                        .map(|(i, _)| t_matrix[i][k])
-                        .sum();
-
                     pi[j][k][l] = if denom > 1e-15 {
-                        numer / denom
+                        numer[l] / denom
                     } else {
                         1.0 / n_classes as f64
                     };
@@ -140,12 +142,11 @@ pub fn fit(
             }
         }
 
-        // --- E-step ---
+        // --- E-step (eq 2.5) ---
 
         let mut log_likelihood = 0.0;
 
         for (i, anns) in annotations.iter().enumerate() {
-            // log P(y_i | c_i = k) + log π_k for each k
             let mut log_probs = vec![0.0f64; n_classes];
             for k in 0..n_classes {
                 log_probs[k] = class_priors[k].ln();
@@ -170,7 +171,6 @@ pub fn fit(
             log_likelihood += log_sum;
         }
 
-        // Convergence check
         if (log_likelihood - prev_ll).abs() < config.tolerance {
             converged = true;
             prev_ll = log_likelihood;
@@ -200,5 +200,7 @@ pub fn fit(
         n_iterations: n_iter,
         converged,
         log_likelihood: prev_ll,
+        annotator_ids,
+        class_labels: classes,
     })
 }

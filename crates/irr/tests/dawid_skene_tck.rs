@@ -12,6 +12,9 @@ pub struct DsWorld {
     error: Option<String>,
     n_items: usize,
     n_classes: u32,
+    golden_labels: Option<Vec<u32>>,
+    golden_priors: Option<Vec<f64>>,
+    golden_prior_tolerance: f64,
 }
 
 fn make_triple(item: usize, annotator: usize, label: u32) -> AnnotationTriple {
@@ -21,6 +24,52 @@ fn make_triple(item: usize, annotator: usize, label: u32) -> AnnotationTriple {
         label,
     }
 }
+
+// --- Golden dataset support ---
+
+#[derive(serde::Deserialize)]
+struct GoldenDataset {
+    observations: Vec<Vec<u32>>,
+    expected_labels: Vec<u32>,
+    expected_marginal_priors: Vec<f64>,
+    prior_tolerance: f64,
+}
+
+#[given("the Dawid-Skene 1979 golden dataset")]
+fn given_golden(world: &mut DsWorld) {
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/golden/dawid_skene_1979.json"
+    );
+    let data: GoldenDataset =
+        serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+
+    for (patient, obs) in data.observations.iter().enumerate() {
+        let patient_id = format!("patient-{}", patient + 1);
+        // Observer 1: 3 ratings (indices 0-2)
+        for &label in &obs[..3] {
+            world.triples.push(AnnotationTriple {
+                item_id: patient_id.clone(),
+                annotator_id: "obs-1".to_string(),
+                label,
+            });
+        }
+        // Observers 2-5: 1 rating each (indices 3-6)
+        for (obs_idx, &label) in obs[3..].iter().enumerate() {
+            world.triples.push(AnnotationTriple {
+                item_id: patient_id.clone(),
+                annotator_id: format!("obs-{}", obs_idx + 2),
+                label,
+            });
+        }
+    }
+
+    world.golden_labels = Some(data.expected_labels);
+    world.golden_priors = Some(data.expected_marginal_priors);
+    world.golden_prior_tolerance = data.prior_tolerance;
+}
+
+// --- Given steps ---
 
 #[given(expr = "{int} annotators who all agree perfectly on {int} items with {int} classes")]
 fn given_perfect(world: &mut DsWorld, n_ann: usize, n_items: usize, n_classes: u32) {
@@ -116,6 +165,8 @@ fn given_single_class(world: &mut DsWorld, n_ann: usize, n_items: usize, class: 
     }
 }
 
+// --- When steps ---
+
 #[when(expr = "I fit Dawid-Skene with max {int} EM iterations")]
 fn when_fit(world: &mut DsWorld, max_iter: usize) {
     let config = DawidSkeneConfig {
@@ -136,6 +187,8 @@ fn when_attempt(world: &mut DsWorld) {
         Err(e) => world.error = Some(e.to_string()),
     }
 }
+
+// --- Then steps ---
 
 #[then("the model converged")]
 fn then_converged(world: &mut DsWorld) {
@@ -171,6 +224,35 @@ fn then_labels_match(world: &mut DsWorld) {
         r.estimated_labels, world.true_labels,
         "estimated labels do not match true labels"
     );
+}
+
+#[then("the estimated labels match the 1979 paper Table 4")]
+fn then_golden_labels(world: &mut DsWorld) {
+    let r = world.result.as_ref().expect("no result");
+    let expected = world
+        .golden_labels
+        .as_ref()
+        .expect("no golden labels loaded");
+    assert_eq!(
+        &r.estimated_labels, expected,
+        "estimated labels do not match Dawid-Skene 1979 Table 4"
+    );
+}
+
+#[then("the class priors match the 1979 paper Table 2")]
+fn then_golden_priors(world: &mut DsWorld) {
+    let r = world.result.as_ref().expect("no result");
+    let expected = world
+        .golden_priors
+        .as_ref()
+        .expect("no golden priors loaded");
+    let tol = world.golden_prior_tolerance;
+    for (k, (&actual, &exp)) in r.class_priors.iter().zip(expected.iter()).enumerate() {
+        assert!(
+            (actual - exp).abs() < tol,
+            "class prior[{k}] = {actual}, expected {exp} ± {tol}"
+        );
+    }
 }
 
 #[then(expr = "annotator 2 has off-diagonal mass > {float}")]
