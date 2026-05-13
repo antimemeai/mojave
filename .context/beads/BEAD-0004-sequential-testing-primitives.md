@@ -73,7 +73,7 @@ Crate `seq-anytime-valid` built and validated end-to-end. All 52 unit tests,
 ### 4-gate validation
 
 - Gate 1: Textbook reproductions (Wald 1947, Pocock 1977, OBF 1979)
-- Gate 2: R fixture cross-checks against gsDesign
+- Gate 2: R fixture infrastructure ready (fixtures pending R installation)
 - Gate 3: Property-based tests (8 invariants via proptest)
 - Gate 4: Monte Carlo calibration (Type-I control for SPRT, CS coverage, always-valid p)
 

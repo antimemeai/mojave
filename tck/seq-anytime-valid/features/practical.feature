@@ -1,5 +1,6 @@
-Feature: Practical significance (Shim 2025)
-  Truncated mSPRT tests for |theta| >= delta, not just theta != 0.
+Feature: Practical significance (max-LR test)
+  Max likelihood ratio test for |theta| >= delta vs |theta| < delta.
+  Takes the max LR across theta = +delta and theta = -delta vs null.
 
   Scenario: Large effect detected as practically significant
     Given delta = 0.5 and mixing_variance = 1.0 and alpha = 0.05

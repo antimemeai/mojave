@@ -30,6 +30,12 @@ pub fn bernoulli_cumulative_log_lr(
     p1: f64,
 ) -> Result<f64, SeqError> {
     validate_observations(observations)?;
+    if p0 <= 0.0 || p0 >= 1.0 {
+        return Err(SeqError::NonFiniteInput(p0));
+    }
+    if p1 <= 0.0 || p1 >= 1.0 {
+        return Err(SeqError::NonFiniteInput(p1));
+    }
     if (p0 - p1).abs() < f64::EPSILON {
         return Err(SeqError::DegenerateHypotheses);
     }
@@ -53,6 +59,9 @@ pub fn normal_cumulative_log_lr(
     sigma_sq: f64,
 ) -> Result<f64, SeqError> {
     validate_observations(observations)?;
+    if sigma_sq <= 0.0 {
+        return Err(SeqError::NonFiniteInput(sigma_sq));
+    }
     if (mu0 - mu1).abs() < f64::EPSILON {
         return Err(SeqError::DegenerateHypotheses);
     }
@@ -119,6 +128,37 @@ mod tests {
         let obs = vec![f64::NAN];
         assert!(matches!(
             bernoulli_cumulative_log_lr(&obs, 0.1, 0.2),
+            Err(SeqError::NonFiniteInput(_))
+        ));
+    }
+
+    #[test]
+    fn bernoulli_boundary_p0_zero_returns_error() {
+        let obs = vec![1.0];
+        assert!(matches!(
+            bernoulli_cumulative_log_lr(&obs, 0.0, 0.5),
+            Err(SeqError::NonFiniteInput(_))
+        ));
+    }
+
+    #[test]
+    fn bernoulli_boundary_p1_one_returns_error() {
+        let obs = vec![1.0];
+        assert!(matches!(
+            bernoulli_cumulative_log_lr(&obs, 0.5, 1.0),
+            Err(SeqError::NonFiniteInput(_))
+        ));
+    }
+
+    #[test]
+    fn normal_nonpositive_sigma_sq_returns_error() {
+        let obs = vec![1.0];
+        assert!(matches!(
+            normal_cumulative_log_lr(&obs, 0.0, 1.0, 0.0),
+            Err(SeqError::NonFiniteInput(_))
+        ));
+        assert!(matches!(
+            normal_cumulative_log_lr(&obs, 0.0, 1.0, -1.0),
             Err(SeqError::NonFiniteInput(_))
         ));
     }

@@ -19,7 +19,6 @@ fn feature_path() -> PathBuf {
 #[derive(Default, Debug)]
 struct PracticalWorld {
     delta: f64,
-    mixing_variance: f64,
     observations: Vec<f64>,
     p_value: Option<f64>,
     last_error: Option<SeqError>,
@@ -39,7 +38,6 @@ fn practical_feature_runs_end_to_end() {
             "delta = 0.5 and mixing_variance = 1.0 and alpha = 0.05",
             |w, _| {
                 w.delta = 0.5;
-                w.mixing_variance = 1.0;
                 w.p_value = None;
                 w.last_error = None;
                 Ok(())
@@ -49,7 +47,6 @@ fn practical_feature_runs_end_to_end() {
             "delta = 1.0 and mixing_variance = 1.0 and alpha = 0.05",
             |w, _| {
                 w.delta = 1.0;
-                w.mixing_variance = 1.0;
                 w.p_value = None;
                 w.last_error = None;
                 Ok(())
@@ -58,7 +55,7 @@ fn practical_feature_runs_end_to_end() {
         // --- When steps ---
         .step("I observe 20 values all equal to 2.0", |w, _| {
             w.observations = vec![2.0; 20];
-            match practical::practical_significance_p(&w.observations, w.delta, w.mixing_variance) {
+            match practical::practical_significance_p(&w.observations, w.delta) {
                 Ok(p) => {
                     w.p_value = Some(p);
                 }
@@ -70,7 +67,7 @@ fn practical_feature_runs_end_to_end() {
         })
         .step("I observe 20 values all equal to 0.1", |w, _| {
             w.observations = vec![0.1; 20];
-            match practical::practical_significance_p(&w.observations, w.delta, w.mixing_variance) {
+            match practical::practical_significance_p(&w.observations, w.delta) {
                 Ok(p) => {
                     w.p_value = Some(p);
                 }
@@ -82,7 +79,7 @@ fn practical_feature_runs_end_to_end() {
         })
         .step("I try to create with delta = -0.5", |w, _| {
             w.observations = vec![1.0];
-            match practical::practical_significance_p(&w.observations, -0.5, 1.0) {
+            match practical::practical_significance_p(&w.observations, -0.5) {
                 Ok(p) => {
                     w.p_value = Some(p);
                 }

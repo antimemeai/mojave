@@ -9,6 +9,9 @@ pub struct SprtMonitor {
     cumulative_log_lr: f64,
     n_observations: usize,
     decided: Option<Decision>,
+    /// Tracks the boosted supermartingale value for `SprtVariant::Boosted`.
+    /// `None` for non-boosted variants.
+    boosted_process: Option<f64>,
 }
 
 impl SprtMonitor {
@@ -21,12 +24,17 @@ impl SprtMonitor {
         if (config.theta_0 - config.theta_1).abs() < f64::EPSILON {
             return Err(SeqError::DegenerateHypotheses);
         }
+        let boosted_process = match config.variant {
+            SprtVariant::Boosted => Some(1.0),
+            _ => None,
+        };
         Ok(Self {
             config,
             boundaries,
             cumulative_log_lr: 0.0,
             n_observations: 0,
             decided: None,
+            boosted_process,
         })
     }
 
@@ -51,6 +59,24 @@ impl SprtMonitor {
         };
         self.cumulative_log_lr += log_lr;
         self.n_observations += 1;
+
+        // Boosted variant: apply truncation in ratio space (Fischer 2024).
+        // Power-one test — only rejects, never accepts.
+        if let Some(ref mut m_boost) = self.boosted_process {
+            let lr_factor = log_lr.exp();
+            let truncated =
+                crate::boundary::boosted::truncation(lr_factor, *m_boost, self.config.alpha);
+            *m_boost *= truncated;
+            let decision = if *m_boost >= 1.0 / self.config.alpha {
+                Decision::Reject
+            } else {
+                Decision::Continue
+            };
+            if decision != Decision::Continue {
+                self.decided = Some(decision);
+            }
+            return Ok(decision);
+        }
 
         let decision = if self.cumulative_log_lr >= self.boundaries.log_upper_a {
             Decision::Reject

@@ -4,6 +4,11 @@ use crate::error::SeqError;
 /// stopping time of a normal-mean SPRT.
 ///
 /// bias ~ (mu1 - mu0) / (2 * n)
+///
+/// This correction assumes the SPRT rejected H0. At the rejection boundary
+/// the MLE overshoots the true effect by this first-order amount (positive
+/// when mu1 > mu0, which is the standard one-sided alternative). Subtracting
+/// the bias shrinks the estimate back toward the null.
 pub fn bias_corrected_mle(mle: f64, n: usize, mu0: f64, mu1: f64) -> Result<f64, SeqError> {
     if n == 0 {
         return Err(SeqError::EmptyObservations);
@@ -15,8 +20,7 @@ pub fn bias_corrected_mle(mle: f64, n: usize, mu0: f64, mu1: f64) -> Result<f64,
         return Err(SeqError::NonFiniteInput(mle));
     }
     let bias = (mu1 - mu0) / (2.0 * n as f64);
-    let sign = if mle >= mu0 { 1.0 } else { -1.0 };
-    Ok(mle - sign * bias.abs())
+    Ok(mle - bias)
 }
 
 /// Median-unbiased estimator: shrinkage toward the null.
