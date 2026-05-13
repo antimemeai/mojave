@@ -43,8 +43,10 @@ Sequential testing is needed for "smart eval budgeting" — stop evaluating earl
 
 ## Completion notes
 
-Crate `seq-anytime-valid` built and validated end-to-end. All 52 unit tests,
-8 TCK integration tests, and 4-gate validation pass.
+Crate `seq-anytime-valid` built and validated end-to-end. All 55 unit tests,
+8 TCK integration tests, and full 4-gate validation pass (including Gate 2 R
+cross-checks against gsDesign). OBF boundaries use MC bisection for exact
+alpha control.
 
 ### Modules implemented
 
@@ -73,7 +75,7 @@ Crate `seq-anytime-valid` built and validated end-to-end. All 52 unit tests,
 ### 4-gate validation
 
 - Gate 1: Textbook reproductions (Wald 1947, Pocock 1977, OBF 1979)
-- Gate 2: R fixture infrastructure ready (fixtures pending R installation)
+- Gate 2: R cross-checks pass (gsDesign Pocock + OBF boundaries, K=2..5, tol < 0.1)
 - Gate 3: Property-based tests (8 invariants via proptest)
 - Gate 4: Monte Carlo calibration (Type-I control for SPRT, CS coverage, always-valid p)
 
