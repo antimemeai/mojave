@@ -10,10 +10,10 @@ description = "Sequential hypothesis testing and anytime-valid inference primiti
 [dependencies]
 thiserror = "2"
 serde = { version = "1", features = ["derive"] }
+rand = "0.9"
+rand_distr = "0.5"
 
 [dev-dependencies]
 proptest = "1"
 approx = "0.5"
-rand = "0.9"
-rand_distr = "0.5"
 metric-tck-harness = { path = "../metric-tck-harness" }
