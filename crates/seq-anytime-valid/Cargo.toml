@@ -17,3 +17,4 @@ rand_distr = "0.5"
 proptest = "1"
 approx = "0.5"
 metric-tck-harness = { path = "../metric-tck-harness" }
+serde_json = "1"
