@@ -1,9 +1,10 @@
 ---
 id: BEAD-0004
 title: Build sequential testing (SPRT / group-sequential) primitives
-status: open
+status: closed
 priority: high
 created: 2026-05-11
+closed: 2026-05-12
 ---
 
 ## Description
@@ -39,3 +40,43 @@ Sequential testing is needed for "smart eval budgeting" — stop evaluating earl
 - Jennison & Turnbull 2000 (Group Sequential Methods — the textbook)
 - Howard et al. 2021 (confidence sequences — modern extension)
 - Siegmund 1985 Ch. 4 (early-stopping bias)
+
+## Completion notes
+
+Crate `seq-anytime-valid` built and validated end-to-end. All 52 unit tests,
+8 TCK integration tests, and 4-gate validation pass.
+
+### Modules implemented
+
+**Boundary (5 modules):**
+- `boundary::wald` — Wald SPRT boundaries (approximate + conservative)
+- `boundary::boosted` — boosted SPRT truncation
+- `boundary::obf` — O'Brien-Fleming boundaries
+- `boundary::pocock` — Pocock boundaries
+- `boundary::spending` — Lan-DeMets α-spending functions
+
+**Evidence (4 modules):**
+- `evidence::likelihood` — Bernoulli + normal log-likelihood ratios
+- `evidence::msprt` — Gaussian mSPRT log-LR and always-valid p-values
+- `evidence::confseq` — normal-mixture confidence sequences (estimated σ and known σ)
+- `evidence::e_value` — e-value product, e-to-p conversion, threshold decisions
+
+**Monitors (3 modules):**
+- `monitor::sprt` — `SprtMonitor` (stateful) + `sprt_decide` (stateless)
+- `monitor::group_seq` — `GroupSeqMonitor` + `compute_boundaries`
+- `monitor::anytime` — `AnytimeMonitor` (mSPRT + confseq combined)
+
+**Estimation (2 modules):**
+- `bias` — `bias_corrected_mle` (Siegmund 1985), `median_unbiased_estimate`
+- `practical` — `practical_significance_p` (truncated mSPRT, Shim 2025)
+
+### 4-gate validation
+
+- Gate 1: Textbook reproductions (Wald 1947, Pocock 1977, OBF 1979)
+- Gate 2: R fixture cross-checks against gsDesign
+- Gate 3: Property-based tests (8 invariants via proptest)
+- Gate 4: Monte Carlo calibration (Type-I control for SPRT, CS coverage, always-valid p)
+
+### TCK feature files (8)
+
+sprt, boosted_sprt, group_sequential, msprt, confseq, e_value, bias, practical
