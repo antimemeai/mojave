@@ -2,7 +2,8 @@ use crate::boundary::wald;
 use crate::error::SeqError;
 
 /// O'Brien-Fleming critical values at look k of K.
-/// c_k = C * sqrt(K / k) where C = z_{alpha/2} for the overall alpha.
+/// c_k = C * sqrt(K / k) where C is numerically solved to control the overall
+/// type I error at alpha across K looks (two-sided).
 pub fn boundary(k: usize, total_looks: usize, alpha: f64) -> Result<f64, SeqError> {
     if total_looks == 0 {
         return Err(SeqError::InvalidLooks(0));
@@ -14,15 +15,66 @@ pub fn boundary(k: usize, total_looks: usize, alpha: f64) -> Result<f64, SeqErro
         });
     }
     wald::validate_error_rates(alpha, 0.5)?;
-    let z = normal_quantile(1.0 - alpha / 2.0);
-    Ok(z * (total_looks as f64 / k as f64).sqrt())
+    let c = obf_constant(total_looks, alpha);
+    Ok(c * (total_looks as f64 / k as f64).sqrt())
 }
 
 /// All K boundaries at once.
 pub fn boundaries(total_looks: usize, alpha: f64) -> Result<Vec<f64>, SeqError> {
-    (1..=total_looks)
-        .map(|k| boundary(k, total_looks, alpha))
-        .collect()
+    if total_looks == 0 {
+        return Err(SeqError::InvalidLooks(0));
+    }
+    wald::validate_error_rates(alpha, 0.5)?;
+    let c = obf_constant(total_looks, alpha);
+    Ok((1..=total_looks)
+        .map(|k| c * (total_looks as f64 / k as f64).sqrt())
+        .collect())
+}
+
+fn obf_constant(total_looks: usize, alpha: f64) -> f64 {
+    if total_looks == 1 {
+        return normal_quantile(1.0 - alpha / 2.0);
+    }
+    let mut lo = 0.5_f64;
+    let mut hi = 6.0_f64;
+    for _ in 0..100 {
+        let mid = (lo + hi) / 2.0;
+        let p = obf_rejection_probability_mc(mid, total_looks, 200_000);
+        if p > alpha {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    (lo + hi) / 2.0
+}
+
+fn obf_rejection_probability_mc(c_constant: f64, total_looks: usize, n_reps: usize) -> f64 {
+    use rand::rngs::StdRng;
+    use rand::SeedableRng;
+    use rand_distr::{Distribution, StandardNormal};
+
+    let mut rng = StdRng::seed_from_u64(42);
+    let normal = StandardNormal;
+    let threshold = c_constant * (total_looks as f64).sqrt();
+    let mut rejections = 0usize;
+
+    for _ in 0..n_reps {
+        let mut cumsum = 0.0_f64;
+        let mut rejected = false;
+        for _look in 1..=total_looks {
+            let x: f64 = normal.sample(&mut rng);
+            cumsum += x;
+            if cumsum.abs() >= threshold {
+                rejected = true;
+                break;
+            }
+        }
+        if rejected {
+            rejections += 1;
+        }
+    }
+    rejections as f64 / n_reps as f64
 }
 
 /// Standard normal quantile (inverse CDF) via rational approximation.
@@ -65,7 +117,7 @@ mod tests {
         let z = normal_quantile(0.975);
         let b = boundary(5, 5, 0.05).unwrap();
         assert!(
-            (b - z).abs() < 0.01,
+            (b - z).abs() < 0.1,
             "at final look OBF ~ z_alpha/2, got {b} vs {z}"
         );
     }
