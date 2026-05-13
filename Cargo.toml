@@ -11,6 +11,7 @@ members = [
     "crates/salib-shapley",
     "crates/salib-surrogate",
     "crates/salib-validation",
+    "crates/seq-anytime-valid",
 ]
 
 [workspace.package]
