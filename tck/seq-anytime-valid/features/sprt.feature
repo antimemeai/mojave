@@ -55,3 +55,13 @@ Feature: Wald SPRT boundaries and decisions
       | 0.05  | 0.05 | 19.0   | 0.05263 |
       | 0.10  | 0.10 | 9.0    | 0.11111 |
       | 0.05  | 0.20 | 16.0   | 0.21053 |
+
+  Scenario: SPRT rejects with strong Bernoulli evidence for H1
+    Given SPRT config with p0 = 0.3 and p1 = 0.7 and alpha = 0.05 and beta = 0.10
+    When I feed 20 observations all equal to 1.0
+    Then the decision is Reject
+
+  Scenario: SPRT accepts with strong Bernoulli evidence for H0
+    Given SPRT config with p0 = 0.3 and p1 = 0.7 and alpha = 0.05 and beta = 0.10
+    When I feed 20 observations all equal to 0.0
+    Then the decision is Accept

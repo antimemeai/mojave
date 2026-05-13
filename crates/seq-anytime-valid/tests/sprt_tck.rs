@@ -22,6 +22,8 @@ struct SprtWorld {
     beta: f64,
     boundaries: Option<wald::SprtBoundaries>,
     error: Option<String>,
+    sprt_config: Option<seq_anytime_valid::SprtConfig>,
+    decision: Option<seq_anytime_valid::Decision>,
 }
 
 fn assert_approx(got: f64, expected: f64) -> Result<(), StepError> {
@@ -204,6 +206,59 @@ fn sprt_feature_runs_end_to_end() {
         })
         .step("the lower boundary B is approximately 0.21053", |w, _| {
             assert_approx(w.boundaries.as_ref().unwrap().lower_b, 0.21053)
+        })
+        // -- Decision steps --
+        .step(
+            "SPRT config with p0 = 0.3 and p1 = 0.7 and alpha = 0.05 and beta = 0.10",
+            |w, _| {
+                w.sprt_config = Some(seq_anytime_valid::SprtConfig {
+                    theta_0: 0.3,
+                    theta_1: 0.7,
+                    alpha: 0.05,
+                    beta: 0.10,
+                    variant: seq_anytime_valid::SprtVariant::Approximate,
+                    family: seq_anytime_valid::DataFamily::Bernoulli,
+                });
+                Ok(())
+            },
+        )
+        .step("I feed 20 observations all equal to 1.0", |w, _| {
+            let config = w.sprt_config.as_ref().unwrap();
+            let obs: Vec<f64> = vec![1.0; 20];
+            w.decision = Some(
+                seq_anytime_valid::monitor::sprt::sprt_decide(config, &obs)
+                    .map_err(|e| StepError::new(e.to_string()))?,
+            );
+            Ok(())
+        })
+        .step("I feed 20 observations all equal to 0.0", |w, _| {
+            let config = w.sprt_config.as_ref().unwrap();
+            let obs: Vec<f64> = vec![0.0; 20];
+            w.decision = Some(
+                seq_anytime_valid::monitor::sprt::sprt_decide(config, &obs)
+                    .map_err(|e| StepError::new(e.to_string()))?,
+            );
+            Ok(())
+        })
+        .step("the decision is Reject", |w, _| {
+            if w.decision == Some(seq_anytime_valid::Decision::Reject) {
+                Ok(())
+            } else {
+                Err(StepError::new(format!(
+                    "expected Reject, got {:?}",
+                    w.decision
+                )))
+            }
+        })
+        .step("the decision is Accept", |w, _| {
+            if w.decision == Some(seq_anytime_valid::Decision::Accept) {
+                Ok(())
+            } else {
+                Err(StepError::new(format!(
+                    "expected Accept, got {:?}",
+                    w.decision
+                )))
+            }
         });
 
     let report = runner.run(&feature);
