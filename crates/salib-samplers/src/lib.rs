@@ -70,6 +70,8 @@ pub use morris::{
 };
 pub use owen_matrix::{build_owen_matrix, OwenMatrix, OwenMatrixError};
 pub use plackett_burman::{build_plackett_burman, PbError, PlackettBurmanDesign};
-pub use saltelli_matrix::{build_saltelli_matrix, SaltelliError, SaltelliMatrix};
+pub use saltelli_matrix::{
+    build_grouped_saltelli_matrix, build_saltelli_matrix, SaltelliError, SaltelliMatrix,
+};
 pub use sampler::Sampler;
 pub use sobol::{SobolDimSet, SobolSampler};
