@@ -1,9 +1,10 @@
 ---
 id: BEAD-0016
 title: Close SALib parity gaps in salib-rs
-status: open
+status: closed
 priority: high
 created: 2026-05-12
+closed: 2026-05-14
 depends-on: [BEAD-0002]
 ---
 
@@ -72,3 +73,19 @@ For context, salib-rs is already ahead in: PCE (full + sparse LARS), active subs
 3. Grouped factors (API change, better done before publish)
 4. Discrepancy indices (standalone, no dependencies)
 5. HDMR (largest scope, least urgent)
+
+## Completion notes (2026-05-14)
+
+All 5 gaps closed. Summary:
+
+| Method | Crate | Tests |
+|--------|-------|-------|
+| S2 Sobol indices | salib-estimators (saltelli2010, jansen, janon, owen) | 3 TCK + 4×unit |
+| Fractional Factorial (Plackett-Burman) | salib-samplers + salib-estimators | 3 TCK + 6 unit |
+| Discrepancy (CD, WD, MD, L2*) | salib-estimators | 6 TCK |
+| Grouped factors (Morris + Sobol) | salib-core + salib-samplers + salib-estimators | 6 TCK + 5 unit |
+| RS-HDMR via PCE | salib-estimators | 4 TCK |
+
+Total: 22 TCK integration tests + 15 unit tests added. Zero workspace regressions.
+
+salib-rs is now a strict superset of Python SALib's method coverage.
