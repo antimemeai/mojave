@@ -195,7 +195,7 @@ fn compute_indices_from_cached(
         total_order.push(s_t_i);
     }
 
-    SobolIndices::new(n, d, d_var, first_order, total_order)
+    SobolIndices::new(n, d, d_var, first_order, total_order, None)
 }
 
 /// Internal: compute `(low_p, high_p)` percentiles of a sample.

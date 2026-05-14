@@ -122,7 +122,7 @@ where
     // compare against this for diagnostic purposes.
     let _diagnostic_var = tree_var(&fa);
 
-    SobolIndices::new(n, d, d_var, first_order, total_order)
+    SobolIndices::new(n, d, d_var, first_order, total_order, None)
 }
 
 /// Internal: call `model` on every row of an ndarray matrix and

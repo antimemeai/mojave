@@ -155,6 +155,23 @@ pub fn analytic_indices(a: f64, b: f64) -> SobolIndicesAnalytic {
     let vt2 = v2; // X_2 has no interactions
     let vt3 = v13;
 
+    // Second-order interaction variances (Saltelli Primer 2008 §5.4):
+    //   V_12 = 0  (X_1 and X_2 are additively separable)
+    //   V_13 = 8·b²·π⁸/225 (already computed above as `v13`)
+    //   V_23 = 0  (X_2 and X_3 don't interact)
+    //
+    // S2_{01} = V_12 / D = 0
+    // S2_{02} = V_13 / D = v13 / total_variance
+    // S2_{12} = V_23 / D = 0
+    //
+    // Layout: second_order[i][k] = S2_{i, i+k+1}
+    //   second_order[0] = [S2_{0,1}, S2_{0,2}]
+    //   second_order[1] = [S2_{1,2}]
+    let second_order = Some(vec![
+        vec![0.0 / total_variance, v13 / total_variance], // S2_{01}=0, S2_{02}=v13/D
+        vec![0.0 / total_variance],                       // S2_{12}=0
+    ]);
+
     SobolIndicesAnalytic::new(
         total_variance,
         vec![
@@ -167,6 +184,7 @@ pub fn analytic_indices(a: f64, b: f64) -> SobolIndicesAnalytic {
             vt2 / total_variance,
             vt3 / total_variance,
         ],
+        second_order,
     )
 }
 
