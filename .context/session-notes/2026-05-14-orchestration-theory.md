@@ -193,23 +193,151 @@ Every perturbation experiment in mojave is implicitly an INV or DIR test.
 The taxonomy gives humans a vocabulary for what the perturbation engine
 is actually measuring.
 
+## User-Facing Surface
+
+The math crates are the engine. Users never touch them directly.
+They interact through three surfaces:
+
+### CLI (`mojave`)
+
+The human entry point. Subcommand structure:
+
+```
+mojave ingest <logs>           Import eval runner output
+mojave analyze <dataset>       Run measurement battery on a dataset
+mojave monitor <stream>        Streaming SPC on incoming results
+mojave ablate <factor-spec>    Design + execute ablation study
+mojave report <run-id>         Generate measurement report
+mojave status                  Campaign/experiment status
+```
+
+`mojave ablate` is the control plane's CLI face. It takes a factor
+specification (which models, tasks, perturbation atoms, seeds to
+cross), generates the experimental design, orchestrates execution,
+and reports decomposition. The user says "here are my factors,
+tell me what matters" — the control plane handles everything else.
+
+### Python SDK (`mojave`)
+
+The eval ecosystem is Python. The SDK wraps the Rust engine via
+PyO3 (not subprocess). Primary audience: eval engineers integrating
+mojave into existing pipelines.
+
+```python
+import mojave
+
+# Ingest
+records = mojave.ingest.from_inspect("logs/")
+
+# Analyze
+report = mojave.analyze(records)
+print(report.irr_summary)
+print(report.can_stop_early)  # Decision, not a number
+
+# Ablate
+campaign = mojave.ablate(
+    factors={
+        "model": ["gpt-4o", "claude-sonnet"],
+        "prompt_format": mojave.atoms.Format,  # all format atoms
+        "temperature": [0.0, 0.5, 1.0],
+    },
+    tasks=my_task_set,
+    runner=mojave.runners.InspectRunner("eval_config.yaml"),
+    design="sobol",       # or "powerset", "factorial", "fractional"
+    stopping="e-value",   # sequential testing gates each cell
+)
+campaign.run()
+print(campaign.sensitivity)  # Sobol indices per factor
+```
+
+### Rust SDK (`mojave` crate)
+
+For embedding in Rust pipelines or building custom tooling.
+Re-exports the public API of all math crates + orchestration
+through a single facade crate.
+
+### Control Plane
+
+The control plane is the intelligence layer that sits above
+individual analyses. It manages **campaigns** — structured
+experimental designs executed over time.
+
+**Core capability: powerset/factorial ablation.**
+
+Given an input set of factors:
+```
+models:        {A, B, C}
+tasks:         {T1, T2, ..., T50}
+perturbations: {format_atoms × paraphrase_atoms}
+seeds:         {0..4}
+```
+
+The control plane:
+
+1. **Generates the design.** Full powerset if the cell count is
+   tractable. Sobol sequence or fractional factorial if not.
+   Uses salib-samplers for structured sampling of the factor space.
+
+2. **Schedules execution.** Emits cell specifications that the
+   customer's runner executes. Manages concurrency, rate limiting,
+   retry with discriminated failure handling (vivaria pattern).
+
+3. **Monitors incrementally.** As results arrive, applies sequential
+   testing (seq-anytime-valid) per cell and per factor. Cells that
+   reach statistical significance stop early. Factors with negligible
+   effect get deprioritized.
+
+4. **Adapts the design.** If a factor shows high total-order effect
+   in early Sobol estimates, the control plane allocates more samples
+   to that region of the factor space. If a factor is clearly inert,
+   it collapses that dimension and reallocates budget.
+
+5. **Reports decomposition.** When the campaign completes (or is
+   stopped by the user), emits the full sensitivity decomposition:
+   which factors drive score variance, which interactions matter,
+   which cells are redundant.
+
+This is the perturbation engine operating at campaign scale. It's
+what turns "run some ablations" into "run the statistically minimal
+set of ablations that answers your question, stop as soon as the
+answer is clear, and tell you exactly what drives your scores."
+
 ## Architecture: Crate Decomposition
 
 ```
-eval-core           TrialRecord data spine (EXISTS)
-eval-ingest         Runner adapters → TrialRecord stream (BEAD-0015)
-eval-orchestrator   Route/Decide loop (BEAD-0013, new)
-eval-perturb        Perturbation atoms + design engine (BEAD-0012, new)
+USER-FACING
+  mojave-cli        CLI binary (BEAD-new)
+  mojave-py         Python SDK via PyO3 (BEAD-new)
+  mojave            Rust facade crate (BEAD-new)
 
-salib-*             Sensitivity analysis (EXISTS)
-irr                 Inter-rater reliability (EXISTS)
-seq-anytime-valid   Sequential testing (EXISTS)
-spc-charts          Control charts (EXISTS)
+ORCHESTRATION
+  eval-core         TrialRecord data spine (EXISTS)
+  eval-ingest       Runner adapters → TrialRecord stream (BEAD-0015)
+  eval-orchestrator Route/Decide/Schedule loop (BEAD-0013, new)
+  eval-perturb      Perturbation atoms + design engine (BEAD-0012, new)
+  eval-campaign     Control plane: designs, campaigns, adaptive (new)
+
+MATH ENGINE
+  salib-*           Sensitivity analysis (EXISTS)
+  irr               Inter-rater reliability (EXISTS)
+  seq-anytime-valid Sequential testing (EXISTS)
+  spc-charts        Control charts (EXISTS)
 ```
 
 The dependency graph:
 
 ```
+mojave-cli ──→ eval-campaign (control plane)
+           ──→ eval-ingest
+           ──→ eval-orchestrator
+
+mojave-py ──→ (same as CLI, via PyO3)
+
+eval-campaign ──→ eval-orchestrator
+              ──→ eval-perturb
+              ──→ salib-samplers (design generation)
+              ──→ seq-anytime-valid (per-cell stopping)
+
 eval-ingest ──→ eval-core
 eval-orchestrator ──→ eval-core
                  ──→ irr
@@ -221,10 +349,11 @@ eval-perturb ──→ eval-core
              ──→ salib-core (for problem specs)
 ```
 
-eval-orchestrator and eval-perturb are peers, not parent-child.
-The orchestrator consumes perturbation designs but doesn't own them.
-The perturbation engine consumes analysis results but doesn't own them.
-They communicate through TrialRecord metadata and Decision signals.
+eval-campaign is the top of the Rust dependency tree. It owns
+campaigns, designs, and adaptive scheduling. eval-orchestrator
+owns per-run analysis routing and decisions. eval-perturb owns
+atom definitions and perturbation application. They compose
+through eval-core's TrialRecord spine.
 
 ## Patterns Stolen From Reference Repos
 
@@ -266,9 +395,11 @@ They communicate through TrialRecord metadata and Decision signals.
 ## What We Do NOT Build
 
 - **An eval runner.** We are not Inspect, not lm-harness, not promptfoo.
-  We sit on top of runners.
-- **A platform/SaaS.** No web dashboards, no user accounts, no hosted
-  infrastructure. Rust binaries + clean API.
+  We sit on top of runners. We design experiments and analyze results,
+  but the customer's runner executes them.
+- **A hosted platform/SaaS.** No web dashboards, no user accounts, no
+  managed infrastructure. CLI + SDKs + local binaries. Defense customers
+  run on their own iron.
 - **An LLM judge.** We measure judge quality, we don't provide judges.
 - **A dataset.** We measure dataset quality, we don't provide datasets.
 - **A model serving layer.** The customer serves their models.
@@ -313,10 +444,31 @@ They communicate through TrialRecord metadata and Decision signals.
    can do. Build it later, but design the orchestrator to be
    constrainable by it.
 
+7. **SDK boundary: thin wrapper vs. reimplementation.** The Python
+   SDK should be a thin PyO3 wrapper over the Rust engine, not a
+   reimplementation. But "thin" is relative — ergonomic Python
+   means pandas DataFrames in, reports out. The SDK needs a
+   translation layer between Python idioms and Rust types. Keep
+   the translation layer in Python, keep the logic in Rust.
+
+8. **CLI as dogfood.** The CLI should be the first consumer of the
+   Rust SDK. If the CLI can't do something, the SDK API is wrong.
+   CLI-first development catches API design mistakes before the
+   Python SDK locks them in.
+
+9. **Campaign state persistence.** Campaigns (ablation studies) run
+   for hours or days. Where does campaign state live between
+   invocations? The control plane needs to be resumable: crash,
+   restart, pick up where you left off. Options:
+   (a) single JSON/bincode file per campaign,
+   (b) SQLite database per campaign,
+   (c) directory of cell-result files.
+   (a) is simplest and sufficient for single-machine operation.
+
 ## Implementation Priority
 
 Phase 1: **eval-ingest** (BEAD-0015)
-- Inspect adapter (the table-stakes runner in safety eval)
+- Inspect adapter (table stakes in the safety eval community)
 - Generic JSONL adapter (BYO schema mapping)
 - TrialRecord validation and normalization
 
@@ -325,15 +477,27 @@ Phase 2: **eval-orchestrator** (BEAD-0013)
 - Decision engine (stop/continue/alert based on instrument readings)
 - Batch mode first, streaming later
 
-Phase 3: **eval-perturb** (BEAD-0012)
+Phase 3: **mojave-cli** + initial **mojave-py**
+- `mojave ingest` + `mojave analyze` subcommands
+- Python SDK: ingest + analyze (the "give us your logs" path)
+- This is the first usable product surface
+
+Phase 4: **eval-perturb** (BEAD-0012)
 - Atom taxonomy (format, paraphrase, multi-turn)
 - Design engine bridge to salib-samplers
 - Perturbation application (emit modified inputs)
 
-Phase 4: **Close the loop**
-- Orchestrator integrates perturbation designs
-- Sequential testing gates perturbation refinement
-- SPC monitors perturbation experiments longitudinally
+Phase 5: **eval-campaign** (control plane)
+- Campaign data model (factors, designs, cell grid, state)
+- Powerset/factorial/Sobol design generation
+- Per-cell sequential testing gates
+- Adaptive factor-space refinement
+
+Phase 6: **Close the loop** (CLI + SDK integration)
+- `mojave ablate` subcommand
+- Python SDK: ablate() API
+- Full campaign lifecycle: design → execute → monitor → report
+- SPC monitors campaigns longitudinally
 
 ## Lit Review Sources
 
