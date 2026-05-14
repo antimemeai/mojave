@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
 
+pub mod arl;
 pub mod combined;
 pub mod cusum;
 pub mod cusum_fir;
@@ -9,6 +10,7 @@ pub mod ewma;
 pub mod shewhart;
 pub mod types;
 
+pub use arl::{cusum_arl, ewma_arl};
 pub use combined::{CombinedChart, CombinedConfig};
 pub use cusum::{CusumChart, CusumConfig};
 pub use cusum_fir::{FirCusumChart, FirCusumConfig};
