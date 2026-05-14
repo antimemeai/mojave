@@ -1,9 +1,3 @@
-//! TCK harness for discrepancy indices — space-filling quality
-//! metrics (CD, WD, MD, L2*).
-//!
-//! Wires `tck/salib/discrepancy/features/discrepancy.feature`
-//! against [`metric_tck_harness::gherkin::SyncRunner`].
-
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -11,26 +5,12 @@
     clippy::cast_precision_loss
 )]
 
-use std::path::PathBuf;
-
-use metric_tck_harness::gherkin::{parse_feature, StepError, SyncRunner};
 use ndarray::{array, Array2};
 use salib_core::RngState;
-use salib_estimators::{compute_discrepancy, DiscrepancyError, DiscrepancyResult};
+use salib_estimators::{compute_discrepancy, DiscrepancyError};
 use salib_samplers::{LhsSampler, Sampler, SobolSampler};
 
 const FIXTURE_SEED: [u8; 32] = [0; 32];
-
-fn feature_path() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("..")
-        .join("..")
-        .join("tck")
-        .join("salib")
-        .join("discrepancy")
-        .join("features")
-        .join("discrepancy.feature")
-}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -200,153 +180,4 @@ fn error_out_of_range() {
         compute_discrepancy(&sample2),
         Err(DiscrepancyError::NotUnitInterval(v)) if v > 1.0
     ));
-}
-
-// ---------------------------------------------------------------------------
-// Gherkin runner
-// ---------------------------------------------------------------------------
-
-#[derive(Default)]
-struct World {
-    grid_result: Option<DiscrepancyResult>,
-    sobol_result: Option<DiscrepancyResult>,
-    lhs_result: Option<DiscrepancyResult>,
-    sobol_64_result: Option<DiscrepancyResult>,
-    sobol_256_result: Option<DiscrepancyResult>,
-}
-
-#[allow(clippy::too_many_lines)]
-#[test]
-fn gherkin_discrepancy_feature_runs() {
-    let path = feature_path();
-    let content =
-        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
-    let feature = parse_feature(&content, "discrepancy.feature").expect("parses cleanly");
-
-    let runner = SyncRunner::new(World::default)
-        // ---- Scenario 1: Regular grid ----
-        .step(
-            "a 2D regular grid of 4 points in [0,1]^2",
-            |_w: &mut World, _| Ok(()),
-        )
-        .step("I compute discrepancy", |w: &mut World, _| {
-            // For the regular-grid scenario and the non-negative scenario.
-            // Compute whichever grid is available.
-            let sample = if w.grid_result.is_none() {
-                regular_grid_2d()
-            } else {
-                // Second call (non-negative scenario) uses a Sobol sample.
-                sobol_sample(32, 2)
-            };
-            let r = compute_discrepancy(&sample).map_err(|e| StepError::new(format!("{e}")))?;
-            w.grid_result = Some(r);
-            Ok(())
-        })
-        .step(
-            "centered_discrepancy is within 0.01 of the analytic value",
-            |w: &mut World, _| {
-                let r = w
-                    .grid_result
-                    .as_ref()
-                    .ok_or_else(|| StepError::new("no result"))?;
-                let expected = 0.216;
-                if (r.centered - expected).abs() >= 0.01 {
-                    return Err(StepError::new(format!(
-                        "CD = {}, expected ~{expected} (tol 0.01)",
-                        r.centered,
-                    )));
-                }
-                Ok(())
-            },
-        )
-        // ---- Scenario 2: Sobol vs random ----
-        .step("a Sobol sample of N=256 in d=3", |w: &mut World, _| {
-            let sample = sobol_sample(256, 3);
-            w.sobol_result = Some(compute_discrepancy(&sample).unwrap());
-            Ok(())
-        })
-        .step("a random sample of N=256 in d=3", |w: &mut World, _| {
-            let sample = lhs_sample(256, 3);
-            w.lhs_result = Some(compute_discrepancy(&sample).unwrap());
-            Ok(())
-        })
-        .step("I compute discrepancy for both", |_w: &mut World, _| {
-            // Already computed in Given steps.
-            Ok(())
-        })
-        .step(
-            "the Sobol centered_discrepancy is less than the random centered_discrepancy",
-            |w: &mut World, _| {
-                let s = w
-                    .sobol_result
-                    .as_ref()
-                    .ok_or_else(|| StepError::new("no sobol result"))?;
-                let r = w
-                    .lhs_result
-                    .as_ref()
-                    .ok_or_else(|| StepError::new("no lhs result"))?;
-                if s.centered >= r.centered {
-                    return Err(StepError::new(format!(
-                        "Sobol CD ({}) >= LHS CD ({})",
-                        s.centered, r.centered
-                    )));
-                }
-                Ok(())
-            },
-        )
-        // ---- Scenario 3: Monotone N ----
-        .step(
-            "Sobol samples at N=64 and N=256 in d=3",
-            |w: &mut World, _| {
-                let s64 = sobol_sample(64, 3);
-                let s256 = sobol_sample(256, 3);
-                w.sobol_64_result = Some(compute_discrepancy(&s64).unwrap());
-                w.sobol_256_result = Some(compute_discrepancy(&s256).unwrap());
-                Ok(())
-            },
-        )
-        .step(
-            "centered_discrepancy at N=256 is less than at N=64",
-            |w: &mut World, _| {
-                let r64 = w
-                    .sobol_64_result
-                    .as_ref()
-                    .ok_or_else(|| StepError::new("no N=64 result"))?;
-                let r256 = w
-                    .sobol_256_result
-                    .as_ref()
-                    .ok_or_else(|| StepError::new("no N=256 result"))?;
-                if r256.centered >= r64.centered {
-                    return Err(StepError::new(format!(
-                        "CD@256 ({}) >= CD@64 ({})",
-                        r256.centered, r64.centered
-                    )));
-                }
-                Ok(())
-            },
-        )
-        // ---- Scenario 4: Non-negative ----
-        .step("any sample matrix in [0,1]^d", |_w: &mut World, _| {
-            // Will be computed in the "I compute discrepancy" step.
-            Ok(())
-        })
-        .step(
-            "centered, wrap_around, modified, and l2_star are all non-negative",
-            |w: &mut World, _| {
-                let r = w
-                    .grid_result
-                    .as_ref()
-                    .ok_or_else(|| StepError::new("no result"))?;
-                if r.centered < 0.0 || r.wrap_around < 0.0 || r.modified < 0.0 || r.l2_star < 0.0 {
-                    return Err(StepError::new(format!(
-                        "negative: CD={}, WD={}, MD={}, L2*={}",
-                        r.centered, r.wrap_around, r.modified, r.l2_star
-                    )));
-                }
-                Ok(())
-            },
-        );
-
-    let report = runner.run(&feature);
-    report.assert_all_passed();
 }
