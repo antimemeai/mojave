@@ -18,3 +18,9 @@ pub use e_detector::{EDetector, EDetectorConfig, EDetectorWindow, EValueSource, 
 pub use ewma::{EwmaChart, EwmaConfig};
 pub use shewhart::{ShewhartChart, ShewhartConfig, ShewhartRule};
 pub use types::{ChartSignal, ControlLimits, SpcError};
+
+#[cfg(feature = "g-theory")]
+pub mod g_theory;
+
+#[cfg(feature = "g-theory")]
+pub use g_theory::control_limits_from_g_theory;
