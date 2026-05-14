@@ -151,13 +151,15 @@ indices, Shapley effects). The perturbation engine is the bridge:
    Saltelli design over the atom product space. Each sample point
    is a PerturbationCell: a specific combination of factor levels.
 
-3. **Apply perturbations** — each cell specifies what transformation
-   to apply to each eval input. Deterministic via ChaCha20Rng seeded
-   from (cell_id, input_hash).
+3. **Apply perturbations** — the perturbation gateway sits between
+   the eval runner and the model as a MitM. The runner points at
+   the gateway endpoint. The gateway applies atoms per the campaign
+   design, forwards to the real model, records both the perturbation
+   and the response. The runner doesn't know perturbation is happening.
 
-4. **Run through eval runner** — the customer's runner executes the
-   perturbed inputs. Results come back as TrialRecords with perturbation
-   factors recorded in metadata.
+4. **Run through eval runner** — the customer's runner executes normally.
+   Results come back as TrialRecords with perturbation factors recorded
+   in metadata via the gateway's audit log.
 
 5. **Estimate sensitivity** — salib-estimators computes Sobol S1/ST/S2
    over the perturbation factors. "40% of score variance is format
@@ -166,6 +168,20 @@ indices, Shapley effects). The perturbation engine is the bridge:
 6. **Adaptive refinement** — if a factor shows high total-order effect,
    design a focused follow-up experiment on that subspace. Sequential
    testing (seq-anytime-valid) gates the decision to stop or continue.
+
+### The perturbation gateway
+
+```
+eval runner ──HTTP──→ mojave perturbation gateway ──HTTP──→ model
+                      (applies atoms per campaign design)
+                      (records audit: perturbation + response)
+                      (gRPC back to engine for design/audit)
+```
+
+The gateway is the configured "inference endpoint" — not a sidecar
+bolted onto the side, but the primary endpoint the runner talks to.
+This is the conex model (format-spread-proxy, paraphrase-proxy)
+generalized.
 
 ### The atom model
 
@@ -180,7 +196,7 @@ Atoms are the smallest unit of perturbation. They are:
 From conex prior art, the pattern is proven. The new work is:
 - Defining the canonical atom taxonomy for mojave
 - Building the design-engine bridge to salib-samplers
-- Building the application layer (how atoms transform eval inputs)
+- Building the gateway (how atoms transform requests in-flight)
 
 ### CheckList's MFT/INV/DIR taxonomy
 
@@ -355,6 +371,66 @@ owns per-run analysis routing and decisions. eval-perturb owns
 atom definitions and perturbation application. They compose
 through eval-core's TrialRecord spine.
 
+## Serialization & Wire Format
+
+```
+bincode     — internal state (campaigns, SPC monitors, caches)
+              + audit corpus (schema is a fixed contract, rarely changes)
+protobuf    — gRPC wire format only
+cbor        — audit corpus (self-describing, decodable without our
+              types, readable by third-party auditors/compliance tools)
+              via ciborium crate (pinned, vendored)
+arrow IPC   — bulk data interchange
+json        — REST boundary
+parquet     — read-only export, NEVER primary store (footer-at-end
+              design means interrupted writes lose everything)
+```
+
+Internal: bincode for hot-path state. CBOR for audit corpus (self-describing,
+third-party auditors can read it without our binary). Protobuf on the gRPC
+wire because that's what gRPC speaks. Arrow IPC for bulk data interchange.
+JSON at REST boundaries. Parquet only as export from durably-stored data.
+
+## API Surface
+
+### gRPC (primary)
+
+The real API. Typed contracts, efficient binary wire format.
+The CLI and Python SDK are both gRPC clients when talking to a
+running engine daemon.
+
+### HTTP/REST (secondary)
+
+Exists because eternal september. Same backing logic, JSON
+serialization at the boundary.
+
+### Engine modes
+
+- **In-process:** CLI embeds the engine directly for single-machine
+  use (`mojave analyze logs/`). No daemon required.
+- **Daemon:** `mojave serve` runs the engine as a gRPC server.
+  CLI and SDKs connect as clients. Required for streaming
+  monitoring and multi-client campaigns.
+
+## Build Discipline
+
+ALL dependencies pinned and vendored. Builds MUST NOT require
+network access. Network is only for cold-starting a repo on a
+new machine (initial `cargo vendor`). After that, fully offline.
+
+## Audit & Instrumentation
+
+- **Always on:** Full instrumentation, content hashes, provenance,
+  audit log strategies. Never disabled. The cost is trivial and
+  there is no off switch.
+- **Sealing (opt-in):** Cryptographic signing, tamper-evident corpus
+  chains. This is the trust differentiator for defense customers.
+  Heavy, but massive upside.
+- **Reports reflect integrity level.** A report generated under sealed
+  discipline says so. A report with instrumentation-only says that.
+  The credibility claim matches what was enforced. No overclaiming.
+- **Audit corpus format:** CBOR (self-describing, third-party readable).
+
 ## Patterns Stolen From Reference Repos
 
 ### From eval runners
@@ -406,64 +482,38 @@ through eval-core's TrialRecord spine.
 
 ## Open Design Questions
 
-1. **Process boundary model.** The existing spec says "no FFI/PyO3 —
-   clean process boundaries." Is this still right? PyO3 would give
-   Python users a much nicer API than subprocess + JSON. The math
-   crates are pure computation — no async, no I/O, no state beyond
-   what's passed in. PyO3 is safe here.
+1. ~~**Process boundary model.**~~ DECIDED: PyO3 for Python SDK.
 
-2. **Streaming vs. batch.** The current TrialRecord model is
-   batch-oriented (collect records, analyze). Sequential testing
-   and SPC are inherently streaming. The orchestrator needs both:
-   batch analysis for initial reports, streaming for monitoring.
+2. ~~**Streaming vs. batch.**~~ DECIDED: Batch-primary API, streaming
+   Monitor as incremental API. Batch implemented atop streaming internally.
 
-3. **State management.** SPC charts are stateful (CUSUM accumulators,
-   EWMA statistics). Where does this state live? Options:
-   (a) in-memory (simple, not durable),
-   (b) serialized to disk (durable, needs state file management),
-   (c) in a database (overkill for now).
-   Start with (a), design for (b).
+3. **State management.** File mode (default, JSON/bincode per entity)
+   AND database connect mode (for customers with existing infra who
+   want queryable state). State trait abstracts over both. File ships
+   first, DB connector when a customer needs it.
 
-4. **Perturbation application layer.** The conex proxies applied
-   perturbations as HTTP sidecar proxies intercepting model calls.
-   That's one model. Another: the perturbation engine emits modified
-   inputs and the customer's runner handles them. The second is more
-   general and doesn't require infrastructure. Start there.
+4. ~~**Perturbation application layer.**~~ DECIDED: MitM gateway.
+   The perturbation engine IS the inference endpoint. The runner
+   points at it, it applies atoms, forwards to the real model.
+   Not a sidecar — the primary endpoint.
 
-5. **Audit envelope scope.** Thunderdome's everything-is-an-envelope
-   discipline is correct for defense customers. But it's heavy for
-   academic users who just want a report. Solution: audit is always
-   computed (hashes, provenance), but envelope emission is
-   configurable (off by default, on for defense deployments).
+5. ~~**Audit envelope scope.**~~ DECIDED: Instrumentation always on
+   (no off switch). Sealing opt-in. Reports reflect integrity level.
+   CBOR for audit corpus.
 
-6. **Pre-registration (BEAD-0009/eval-prereg).** The NOTE_TO_SKY_CLAUDE
-   document describes an ICH E9-style pre-registration layer that
-   declares analysis plans upfront. This is correct and important
-   for defense customers. It is NOT part of the orchestration layer
-   itself — it's a meta-layer that constrains what the orchestrator
-   can do. Build it later, but design the orchestrator to be
-   constrainable by it.
+6. **Pre-registration.** Design for it, build later. NOT on the
+   critical path. Goes in FUTURE_WORK.
 
-7. **SDK boundary: thin wrapper vs. reimplementation.** The Python
-   SDK should be a thin PyO3 wrapper over the Rust engine, not a
-   reimplementation. But "thin" is relative — ergonomic Python
-   means pandas DataFrames in, reports out. The SDK needs a
-   translation layer between Python idioms and Rust types. Keep
-   the translation layer in Python, keep the logic in Rust.
+7. **SDK boundary.** mojave is an interface, not a workspace. Python
+   SDK is a typed gRPC client with PyO3 in-process option. A few
+   canonical format conveniences (DataFrame) are fine. Everything
+   else is open-an-issue.
 
-8. **CLI as dogfood.** The CLI should be the first consumer of the
-   Rust SDK. If the CLI can't do something, the SDK API is wrong.
-   CLI-first development catches API design mistakes before the
-   Python SDK locks them in.
+8. **CLI as dogfood.** CLI embeds engine in-process for single-machine
+   use. Also works as gRPC client to a running daemon. Both modes.
 
-9. **Campaign state persistence.** Campaigns (ablation studies) run
-   for hours or days. Where does campaign state live between
-   invocations? The control plane needs to be resumable: crash,
-   restart, pick up where you left off. Options:
-   (a) single JSON/bincode file per campaign,
-   (b) SQLite database per campaign,
-   (c) directory of cell-result files.
-   (a) is simplest and sufficient for single-machine operation.
+9. **Campaign state persistence.** Covered by Q3 (state management).
+   File-per-campaign default, DB connect mode for heavy users.
 
 ## Implementation Priority
 
@@ -485,7 +535,7 @@ Phase 3: **mojave-cli** + initial **mojave-py**
 Phase 4: **eval-perturb** (BEAD-0012)
 - Atom taxonomy (format, paraphrase, multi-turn)
 - Design engine bridge to salib-samplers
-- Perturbation application (emit modified inputs)
+- Perturbation gateway (MitM inference endpoint)
 
 Phase 5: **eval-campaign** (control plane)
 - Campaign data model (factors, designs, cell grid, state)
