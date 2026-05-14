@@ -13,12 +13,22 @@ who need to demonstrate that they didn't p-hack their eval results.
 
 Prior thinking: NOTE_TO_SKY_CLAUDE §eval-prereg, BEAD-0009.
 
-## Binary signing
+## Binary signing — REQUIRED BEFORE PRODUCTION
 
 Signed release binaries for mojave-cli and the engine daemon.
-Defense customers need to verify the tool itself, not just its output.
-Pairs with the audit sealing feature (signed envelopes from a
-signed binary = full provenance chain from tool to result).
+Not deferred in spirit — this is required for production deployment.
+The integrity of reporting depends on the integrity of the tool
+producing it. If the binary can't prove it hasn't been tampered with,
+the audit chain is meaningless.
+
+Hardware fuse analogy (Nintendo Switch eFuse model): the binary
+should carry a tamper-evident marker that customers can verify
+before trusting its output. Signed envelopes from an unsigned
+binary is theater.
+
+Deferred from the initial build phases only because the math and
+orchestration need to exist before there's something to sign.
+Slots in before first external deployment, not after.
 
 ## Sealed audit corpus
 
