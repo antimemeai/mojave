@@ -1,0 +1,32 @@
+[package]
+name = "spc-charts"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = """
+Stateful SPC control chart monitors — Shewhart, CUSUM, FIR CUSUM,
+EWMA, combined Shewhart-CUSUM, e-detector change-point detection.
+"""
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+seq-anytime-valid = { path = "../seq-anytime-valid" }
+nalgebra = "0.33"
+
+[dependencies.salib-estimators]
+path = "../salib-estimators"
+optional = true
+
+[features]
+default = []
+g-theory = ["dep:salib-estimators"]
+
+[lints]
+workspace = true

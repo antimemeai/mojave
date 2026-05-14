@@ -12,6 +12,7 @@ members = [
     "crates/salib-surrogate",
     "crates/salib-validation",
     "crates/seq-anytime-valid",
+    "crates/spc-charts",
 ]
 
 [workspace.package]
