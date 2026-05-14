@@ -69,9 +69,16 @@ pub struct Factor {
     pub kind: FactorKind,
 }
 
+/// A named group of factors treated as a single unit in SA.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Group {
+    pub name: String,
+    pub factor_indices: Vec<usize>,
+}
+
 /// The declarative input-space description for an SA campaign.
 ///
-/// Today: `factors` only. The `groups` / `correlation` / `output`
+/// `factors` + optional `groups`. The `correlation` / `output`
 /// fields named in `rust_salib_crate_research.md` § 3.1 land via
 /// follow-on PRs (each has its own design questions). `Problem` is
 /// `#[non_exhaustive]` — adding those fields is non-breaking.
@@ -79,6 +86,8 @@ pub struct Factor {
 #[non_exhaustive]
 pub struct Problem {
     pub factors: Vec<Factor>,
+    /// Factor groups for grouped SA. `None` = ungrouped (each factor independent).
+    pub groups: Option<Vec<Group>>,
 }
 
 impl Problem {
@@ -121,6 +130,7 @@ impl Problem {
 #[derive(Debug, Default, Clone)]
 pub struct ProblemBuilder {
     factors: Vec<Factor>,
+    groups: Vec<Group>,
 }
 
 /// Errors arising from `ProblemBuilder::build`.
@@ -139,6 +149,19 @@ pub enum BuildError {
     /// Categorical factor's `n` is 0.
     #[error("Categorical factor {name} must have n >= 1")]
     EmptyCategorical { name: String },
+    /// A group has an empty `factor_indices` list.
+    #[error("group {group} has empty factor_indices")]
+    EmptyGroup { group: String },
+    /// A group references a factor index beyond `factors.len()`.
+    #[error("group {group}: factor index {index} out of range (dim={dim})")]
+    GroupIndexOutOfRange {
+        group: String,
+        index: usize,
+        dim: usize,
+    },
+    /// A factor appears in more than one group.
+    #[error("factor {index} appears in multiple groups")]
+    FactorInMultipleGroups { index: usize },
 }
 
 impl ProblemBuilder {
@@ -155,6 +178,16 @@ impl ProblemBuilder {
             name: name.to_string(),
             distribution,
             kind: FactorKind::Continuous,
+        });
+        self
+    }
+
+    /// Add a factor group. Indices must refer to factors already added.
+    #[must_use]
+    pub fn group(mut self, name: &str, factor_indices: &[usize]) -> Self {
+        self.groups.push(Group {
+            name: name.to_string(),
+            factor_indices: factor_indices.to_vec(),
         });
         self
     }
@@ -209,8 +242,39 @@ impl ProblemBuilder {
             }
         }
 
+        // Group validation.
+        let dim = self.factors.len();
+        let mut factor_group_owner: Vec<Option<usize>> = vec![None; dim];
+        for (gi, g) in self.groups.iter().enumerate() {
+            if g.factor_indices.is_empty() {
+                return Err(BuildError::EmptyGroup {
+                    group: g.name.clone(),
+                });
+            }
+            for &idx in &g.factor_indices {
+                if idx >= dim {
+                    return Err(BuildError::GroupIndexOutOfRange {
+                        group: g.name.clone(),
+                        index: idx,
+                        dim,
+                    });
+                }
+                if factor_group_owner[idx].is_some() {
+                    return Err(BuildError::FactorInMultipleGroups { index: idx });
+                }
+                factor_group_owner[idx] = Some(gi);
+            }
+        }
+
+        let groups = if self.groups.is_empty() {
+            None
+        } else {
+            Some(self.groups)
+        };
+
         Ok(Problem {
             factors: self.factors,
+            groups,
         })
     }
 }
@@ -667,5 +731,58 @@ mod tests {
         let _ = format!("{err:?}");
         let err = BuildError::DuplicateName { name: "x".into() };
         let _ = format!("{err}");
+    }
+
+    // ── Group tests ────────────────────────────────────────────────
+
+    #[test]
+    fn grouped_problem_builds() {
+        let p = ProblemBuilder::new()
+            .factor("x1", uniform(0.0, 1.0))
+            .factor("x2", uniform(0.0, 1.0))
+            .factor("x3", uniform(0.0, 1.0))
+            .group("shape", &[0, 1])
+            .group("scale", &[2])
+            .build()
+            .unwrap();
+        assert_eq!(p.groups.as_ref().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn no_groups_gives_none() {
+        let p = ProblemBuilder::new()
+            .factor("x1", uniform(0.0, 1.0))
+            .build()
+            .unwrap();
+        assert!(p.groups.is_none());
+    }
+
+    #[test]
+    fn group_index_out_of_range_fails() {
+        let result = ProblemBuilder::new()
+            .factor("x1", uniform(0.0, 1.0))
+            .group("bad", &[5])
+            .build();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn factor_in_multiple_groups_fails() {
+        let result = ProblemBuilder::new()
+            .factor("x1", uniform(0.0, 1.0))
+            .factor("x2", uniform(0.0, 1.0))
+            .group("a", &[0])
+            .group("b", &[0, 1])
+            .build();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn empty_group_fails() {
+        let result = ProblemBuilder::new()
+            .factor("x1", uniform(0.0, 1.0))
+            .group("empty", &[])
+            .build();
+        assert!(result.is_err());
     }
 }
