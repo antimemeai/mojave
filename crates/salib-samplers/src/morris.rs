@@ -40,7 +40,7 @@
 
 use ndarray::{Array2, Array3};
 use rand::RngCore;
-use salib_core::RngState;
+use salib_core::{Group, RngState};
 
 /// Output of `build_morris_trajectories`.
 ///
@@ -65,6 +65,11 @@ pub struct MorrisTrajectories {
     /// `r`. Useful for the EE estimator to know which factor's
     /// step happened between consecutive points.
     pub factor_order: Array2<usize>,
+    /// `(R, n_groups)` array of group permutations for grouped
+    /// trajectories. `group_order[[r, k]]` is the GROUP index stepped
+    /// at position `k` of trajectory `r`. `None` for ungrouped
+    /// (standard) trajectories produced by `build_morris_trajectories`.
+    pub group_order: Option<Array2<usize>>,
     /// Number of trajectories.
     pub r: usize,
     /// Factor count.
@@ -201,6 +206,118 @@ pub fn build_morris_trajectories(
         trajectories: traj,
         deltas: deltas_arr,
         factor_order: order_arr,
+        group_order: None,
+        r,
+        d,
+        levels,
+    })
+}
+
+/// Build `r` grouped Morris trajectories for a `d`-factor problem.
+///
+/// In grouped Morris, factors in the same group are perturbed
+/// simultaneously. Instead of `d + 1` points per trajectory (one
+/// step per factor), there are `n_groups + 1` points (one step per
+/// group). Each step perturbs ALL factors in the selected group by
+/// their respective `+-Δ` values.
+///
+/// Output: `MorrisTrajectories` with `(R, n_groups+1, d)` points,
+/// `(R, d)` deltas, `(R, d)` factor_order (records which factor was
+/// stepped, flattened), and `(R, n_groups)` group_order (records
+/// which GROUP was stepped at each position).
+///
+/// # Errors
+///
+/// Same as `build_morris_trajectories`: `MorrisError::ZeroR`,
+/// `ZeroD`, `LevelsBelowTwo`, `LevelsOdd`.
+#[allow(clippy::cast_precision_loss, clippy::similar_names)]
+pub fn build_grouped_morris_trajectories(
+    groups: &[Group],
+    d: usize,
+    r: usize,
+    levels: u32,
+    rng: &mut RngState,
+) -> Result<MorrisTrajectories, MorrisError> {
+    if r == 0 {
+        return Err(MorrisError::ZeroR);
+    }
+    if d == 0 {
+        return Err(MorrisError::ZeroD);
+    }
+    if levels < 2 {
+        return Err(MorrisError::LevelsBelowTwo { levels });
+    }
+    if !levels.is_multiple_of(2) {
+        return Err(MorrisError::LevelsOdd { levels });
+    }
+
+    let n_groups = groups.len();
+
+    // Δ = p / (2(p-1)) per Saltelli.
+    let p = f64::from(levels);
+    let delta = p / (2.0 * (p - 1.0));
+
+    let mut chacha = rng.clone().into_chacha();
+    let grid_step = 1.0 / f64::from(levels - 1);
+    let valid_base_levels = (levels / 2) as usize;
+
+    let mut traj = Array3::<f64>::zeros((r, n_groups + 1, d));
+    let mut deltas_arr = Array2::<f64>::zeros((r, d));
+    // factor_order: (R, d) — records which factor was stepped for
+    // each of the d factor-level steps (some factors are stepped
+    // simultaneously within a group, but we record group-level
+    // order in group_order).
+    let mut order_arr = Array2::<usize>::zeros((r, d));
+    let mut group_order_arr = Array2::<usize>::zeros((r, n_groups));
+
+    for r_idx in 0..r {
+        // Random base point: each coordinate from the lower half.
+        let mut base = vec![0.0_f64; d];
+        for slot in &mut base {
+            #[allow(clippy::cast_possible_truncation)]
+            let lvl = (chacha.next_u32() as usize) % valid_base_levels;
+            #[allow(clippy::cast_precision_loss)]
+            let base_val = (lvl as f64) * grid_step;
+            *slot = base_val;
+        }
+
+        // Random permutation of GROUP indices via Fisher-Yates.
+        let mut perm: Vec<usize> = (0..n_groups).collect();
+        for i in (1..n_groups).rev() {
+            #[allow(clippy::cast_possible_truncation)]
+            let k = (chacha.next_u32() as usize) % (i + 1);
+            perm.swap(i, k);
+        }
+
+        // Emit point 0 (base).
+        for j in 0..d {
+            traj[[r_idx, 0, j]] = base[j];
+        }
+
+        // Emit points 1..=n_groups, stepping all factors in each
+        // group simultaneously.
+        let mut current = base.clone();
+        for (step_idx, &group_idx) in perm.iter().enumerate() {
+            let group = &groups[group_idx];
+            for &factor_j in &group.factor_indices {
+                current[factor_j] += delta;
+                deltas_arr[[r_idx, factor_j]] = delta;
+                order_arr[[r_idx, factor_j]] = step_idx;
+            }
+            for j in 0..d {
+                traj[[r_idx, step_idx + 1, j]] = current[j];
+            }
+            group_order_arr[[r_idx, step_idx]] = group_idx;
+        }
+    }
+
+    *rng = RngState::snapshot(&chacha, rng);
+
+    Ok(MorrisTrajectories {
+        trajectories: traj,
+        deltas: deltas_arr,
+        factor_order: order_arr,
+        group_order: Some(group_order_arr),
         r,
         d,
         levels,

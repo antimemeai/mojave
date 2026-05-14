@@ -65,7 +65,9 @@ pub mod sobol;
 pub use fast::{build_fast_design, FastDesign, FastError};
 pub use iman_conover::{iman_conover_transform, ImanConoverError};
 pub use lhs::{LhsKind, LhsSampler};
-pub use morris::{build_morris_trajectories, MorrisError, MorrisTrajectories};
+pub use morris::{
+    build_grouped_morris_trajectories, build_morris_trajectories, MorrisError, MorrisTrajectories,
+};
 pub use owen_matrix::{build_owen_matrix, OwenMatrix, OwenMatrixError};
 pub use plackett_burman::{build_plackett_burman, PbError, PlackettBurmanDesign};
 pub use saltelli_matrix::{build_saltelli_matrix, SaltelliError, SaltelliMatrix};

@@ -113,7 +113,9 @@ pub use g_theory::{
 pub use given_data_sobol::{estimate_given_data_sobol, GivenDataSobolError, GivenDataSobolIndices};
 pub use janon::{estimate_janon, JanonIndices};
 pub use jansen::{estimate_jansen, JansenIndices};
-pub use morris::{estimate_morris_effects, EmptyError, MorrisEffects};
+pub use morris::{
+    estimate_grouped_morris_effects, estimate_morris_effects, EmptyError, MorrisEffects,
+};
 pub use owen::{estimate_owen, OwenIndices};
 pub use pawn::{estimate_pawn, PawnError, PawnIndices};
 pub use qosa::{estimate_qosa, QosaError, QosaIndices};
