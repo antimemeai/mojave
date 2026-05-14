@@ -76,6 +76,7 @@ pub mod fast;
 pub mod fractional_factorial;
 pub mod g_theory;
 pub mod given_data_sobol;
+pub mod hdmr;
 pub mod janon;
 pub mod jansen;
 pub mod morris;
@@ -111,6 +112,7 @@ pub use g_theory::{
     GTheoryResult,
 };
 pub use given_data_sobol::{estimate_given_data_sobol, GivenDataSobolError, GivenDataSobolIndices};
+pub use hdmr::{estimate_hdmr, HdmrError, HdmrResult};
 pub use janon::{estimate_janon, JanonIndices};
 pub use jansen::{estimate_jansen, JansenIndices};
 pub use morris::{
