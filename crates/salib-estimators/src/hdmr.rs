@@ -34,11 +34,7 @@
 //! - Li et al. 2001. RS-HDMR via orthogonal polynomials.
 //! - Sudret 2008. PCE-based Sobol' indices (Eq 36-39).
 
-#![allow(
-    clippy::similar_names,
-    clippy::cast_precision_loss,
-    clippy::expect_used
-)]
+#![allow(clippy::similar_names, clippy::cast_precision_loss)]
 
 use ndarray::Array2;
 use salib_core::Problem;
@@ -84,6 +80,10 @@ pub enum HdmrError {
     /// PCE fit failed (delegated from `salib-surrogate`).
     #[error("PCE fit failed: {0}")]
     PceFitFailed(#[from] PceError),
+    /// Factor distribution has infinite support and no matching
+    /// polynomial family (Legendre requires finite `[lo, hi]`).
+    #[error("factor {index} has unsupported distribution for HDMR: {reason}")]
+    UnsupportedDistribution { index: usize, reason: String },
 }
 
 /// RS-HDMR via PCE decomposition.
@@ -117,19 +117,27 @@ pub fn estimate_hdmr(
     let d = problem.dim();
     let n = x.nrows();
 
-    // Choose polynomial families based on factor distributions.
-    let families: Vec<PolynomialFamily> = problem
-        .factors()
-        .iter()
-        .map(|f| match f.distribution {
-            salib_core::Distribution::Normal { .. } => PolynomialFamily::Hermite,
-            _ => PolynomialFamily::Legendre,
-        })
-        .collect();
+    // Choose polynomial families and validate canonical-domain mapping.
+    let mut families = Vec::with_capacity(d);
+    for (j, f) in problem.factors().iter().enumerate() {
+        match f.distribution {
+            salib_core::Distribution::Normal { .. } => {
+                families.push(PolynomialFamily::Hermite);
+            }
+            _ => {
+                let (lo, hi) = f.distribution.support();
+                if !lo.is_finite() || !hi.is_finite() {
+                    return Err(HdmrError::UnsupportedDistribution {
+                        index: j,
+                        reason: format!("Legendre requires finite support, got ({lo}, {hi})"),
+                    });
+                }
+                families.push(PolynomialFamily::Legendre);
+            }
+        }
+    }
 
     // Map physical inputs to canonical domain.
-    // For Legendre (Uniform(lo, hi)): canonical = 2*(x - lo)/(hi - lo) - 1 ∈ [-1, 1]
-    // For Hermite (Normal(mu, sigma)): canonical = (x - mu) / sigma
     let mut x_canonical = Array2::<f64>::zeros((n, d));
     for i in 0..n {
         for j in 0..d {
