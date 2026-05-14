@@ -72,6 +72,10 @@ pub struct OwenIndices {
     pub first_order: Vec<f64>,
     /// Total variance estimated from the joint `(A, B)` samples.
     pub total_variance: f64,
+    /// Second-order indices. Always `None` for Owen — the 3-matrix
+    /// `(A, B, C)` design lacks the `A_B` matrices needed for the
+    /// Saltelli 2010 Eq d formula.
+    pub second_order: Option<Vec<Vec<f64>>>,
 }
 
 impl OwenIndices {
@@ -142,6 +146,7 @@ where
     OwenIndices {
         first_order,
         total_variance,
+        second_order: None,
     }
 }
 

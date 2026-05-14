@@ -71,9 +71,12 @@ pub mod bootstrap;
 pub mod bootstrap_given_data;
 pub mod borgonovo;
 pub mod dgsm;
+pub mod discrepancy;
 pub mod fast;
+pub mod fractional_factorial;
 pub mod g_theory;
 pub mod given_data_sobol;
+pub mod hdmr;
 pub mod janon;
 pub mod jansen;
 pub mod morris;
@@ -100,16 +103,21 @@ pub use dgsm::{
     estimate_dgsm, finite_difference_gradients, poincare_constant, DgsmError, DgsmIndices, FdKind,
     PoincareError,
 };
+pub use discrepancy::{compute_discrepancy, DiscrepancyError, DiscrepancyResult};
 pub use fast::{estimate_fast, FastEstimatorError, FastIndices};
+pub use fractional_factorial::{estimate_fractional_factorial, FractionalFactorialEffects};
 pub use g_theory::{
     bootstrap_g_theory_pir, estimate_g_theory_pir, estimate_g_theory_pir_with_bootstrap,
     project_g_theory_d_study, DStudyPoint, GTheoryBootstrapError, GTheoryDesign, GTheoryError,
     GTheoryResult,
 };
 pub use given_data_sobol::{estimate_given_data_sobol, GivenDataSobolError, GivenDataSobolIndices};
+pub use hdmr::{estimate_hdmr, HdmrError, HdmrResult};
 pub use janon::{estimate_janon, JanonIndices};
 pub use jansen::{estimate_jansen, JansenIndices};
-pub use morris::{estimate_morris_effects, EmptyError, MorrisEffects};
+pub use morris::{
+    estimate_grouped_morris_effects, estimate_morris_effects, EmptyError, MorrisEffects,
+};
 pub use owen::{estimate_owen, OwenIndices};
 pub use pawn::{estimate_pawn, PawnError, PawnIndices};
 pub use qosa::{estimate_qosa, QosaError, QosaIndices};

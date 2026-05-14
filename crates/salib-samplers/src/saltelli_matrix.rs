@@ -46,7 +46,7 @@
 //! returns `SaltelliError::OddBaseDim`.
 
 use ndarray::Array2;
-use salib_core::RngState;
+use salib_core::{Group, RngState};
 
 use crate::sampler::Sampler;
 
@@ -101,6 +101,17 @@ pub enum SaltelliError {
     /// cleanly into A and B halves).
     #[error("Saltelli: radial design requires even sampler.dim(), got {dim}")]
     OddBaseDim { dim: usize },
+    /// Grouped construction requires at least one group.
+    #[error("Saltelli: groups slice must be non-empty")]
+    EmptyGroups,
+    /// A factor index in a group exceeds the physical factor
+    /// dimension `d = sampler.dim() / 2`.
+    #[error("Saltelli: group {group} contains factor index {index} but d = {d}")]
+    GroupIndexOutOfBounds {
+        group: usize,
+        index: usize,
+        d: usize,
+    },
 }
 
 /// Build a Saltelli `(A, B, A_Bⁱ)` matrix bundle (radial design,
@@ -178,6 +189,119 @@ pub fn build_saltelli_matrix(
     Ok(SaltelliMatrix {
         n,
         dim: d,
+        a,
+        b,
+        a_b,
+        b_a,
+    })
+}
+
+/// Build a grouped Saltelli `(A, B, A_Bᵍ)` matrix bundle (radial
+/// design, Saltelli 2010) where column swaps are applied per group
+/// rather than per individual factor.
+///
+/// When every group contains exactly one factor this is equivalent to
+/// `build_saltelli_matrix`. The key insight: the downstream
+/// `estimate_saltelli2010` estimator already operates on
+/// `SaltelliMatrix` where `dim` = `a_b.len()`, so when `a_b` has
+/// `n_groups` entries (one per group, swapping ALL columns in that
+/// group at once) the estimator naturally produces per-group indices
+/// with zero changes.
+///
+/// # Layout
+///
+/// - `a`, `b`: `n × d` (full physical dimension), unchanged.
+/// - `a_b`: `n_groups` entries, each `n × d`. `a_b[g]` = `a` with
+///   every column in `groups[g].factor_indices` replaced by `b`'s
+///   corresponding column.
+/// - `b_a` (if `second_order`): analogous, `b` with group's columns
+///   from `a`.
+/// - `dim`: set to `n_groups` so the estimator loops correctly.
+///
+/// # Errors
+///
+/// - `SaltelliError::ZeroN` if `n == 0`.
+/// - `SaltelliError::OddBaseDim` if `sampler.dim()` is odd.
+/// - `SaltelliError::EmptyGroups` if `groups` is empty.
+/// - `SaltelliError::GroupIndexOutOfBounds` if any factor index in
+///   any group is `>= d`.
+#[allow(clippy::many_single_char_names)]
+pub fn build_grouped_saltelli_matrix(
+    sampler: &dyn Sampler,
+    groups: &[Group],
+    n: usize,
+    second_order: bool,
+    rng: &mut RngState,
+) -> Result<SaltelliMatrix, SaltelliError> {
+    if n == 0 {
+        return Err(SaltelliError::ZeroN);
+    }
+    let base_dim = sampler.dim();
+    if !base_dim.is_multiple_of(2) {
+        return Err(SaltelliError::OddBaseDim { dim: base_dim });
+    }
+    if groups.is_empty() {
+        return Err(SaltelliError::EmptyGroups);
+    }
+    let d = base_dim / 2;
+
+    // Validate all group factor indices are within [0, d).
+    for (g_idx, group) in groups.iter().enumerate() {
+        for &fi in &group.factor_indices {
+            if fi >= d {
+                return Err(SaltelliError::GroupIndexOutOfBounds {
+                    group: g_idx,
+                    index: fi,
+                    d,
+                });
+            }
+        }
+    }
+
+    let n_groups = groups.len();
+
+    // Single base draw of n × 2d. Splitting downstream.
+    let base = sampler.unit_sample(n, rng);
+
+    // Split into halves by column-by-column copy.
+    let mut a = Array2::<f64>::zeros((n, d));
+    let mut b = Array2::<f64>::zeros((n, d));
+    for j in 0..d {
+        a.column_mut(j).assign(&base.column(j));
+        b.column_mut(j).assign(&base.column(j + d));
+    }
+
+    // Build A_Bᵍ matrices: for each group, start with A and replace
+    // ALL columns in that group's factor_indices with B's columns.
+    let mut a_b: Vec<Array2<f64>> = Vec::with_capacity(n_groups);
+    for group in groups {
+        let mut m = a.clone();
+        for &fi in &group.factor_indices {
+            let col_b = b.column(fi).to_owned();
+            m.column_mut(fi).assign(&col_b);
+        }
+        a_b.push(m);
+    }
+
+    // Optionally B_Aᵍ.
+    let b_a = if second_order {
+        let mut v: Vec<Array2<f64>> = Vec::with_capacity(n_groups);
+        for group in groups {
+            let mut m = b.clone();
+            for &fi in &group.factor_indices {
+                let col_a = a.column(fi).to_owned();
+                m.column_mut(fi).assign(&col_a);
+            }
+            v.push(m);
+        }
+        Some(v)
+    } else {
+        None
+    };
+
+    Ok(SaltelliMatrix {
+        n,
+        dim: n_groups,
         a,
         b,
         a_b,
@@ -444,5 +568,137 @@ mod tests {
         let mut rng = fresh_rng();
         let m = build_saltelli_matrix(&s, 32, false, &mut rng).unwrap();
         assert_ne!(m.a, m.b);
+    }
+
+    // ── Grouped Saltelli matrix ────────────────────────────────────
+
+    #[test]
+    fn grouped_empty_groups_returns_error() {
+        let s = LhsSampler::classic(6);
+        let mut rng = fresh_rng();
+        let err = build_grouped_saltelli_matrix(&s, &[], 32, false, &mut rng).unwrap_err();
+        assert_eq!(err, SaltelliError::EmptyGroups);
+    }
+
+    #[test]
+    fn grouped_out_of_bounds_index_returns_error() {
+        use salib_core::Group;
+        let groups = vec![Group {
+            name: "bad".into(),
+            factor_indices: vec![0, 5], // d=3, so 5 is out of bounds
+        }];
+        let s = LhsSampler::classic(6);
+        let mut rng = fresh_rng();
+        let err = build_grouped_saltelli_matrix(&s, &groups, 32, false, &mut rng).unwrap_err();
+        assert_eq!(
+            err,
+            SaltelliError::GroupIndexOutOfBounds {
+                group: 0,
+                index: 5,
+                d: 3
+            }
+        );
+    }
+
+    #[test]
+    fn grouped_replaces_all_columns_in_group() {
+        use salib_core::Group;
+        let groups = vec![
+            Group {
+                name: "AB".into(),
+                factor_indices: vec![0, 1],
+            },
+            Group {
+                name: "C".into(),
+                factor_indices: vec![2],
+            },
+        ];
+        let s = LhsSampler::classic(6); // sampler dim=6 -> d=3
+        let mut rng = fresh_rng();
+        let m = build_grouped_saltelli_matrix(&s, &groups, 32, false, &mut rng).unwrap();
+        assert_eq!(m.dim, 2); // n_groups = 2
+        assert_eq!(m.a_b.len(), 2);
+        assert_eq!(m.a.shape(), &[32, 3]); // physical d=3
+
+        // Group 0 (factors 0,1): both columns should come from B
+        for row in 0..32 {
+            assert_eq!(m.a_b[0][[row, 0]], m.b[[row, 0]]);
+            assert_eq!(m.a_b[0][[row, 1]], m.b[[row, 1]]);
+            assert_eq!(m.a_b[0][[row, 2]], m.a[[row, 2]]); // untouched
+        }
+
+        // Group 1 (factor 2): only column 2 from B
+        for row in 0..32 {
+            assert_eq!(m.a_b[1][[row, 0]], m.a[[row, 0]]); // untouched
+            assert_eq!(m.a_b[1][[row, 1]], m.a[[row, 1]]); // untouched
+            assert_eq!(m.a_b[1][[row, 2]], m.b[[row, 2]]);
+        }
+    }
+
+    #[test]
+    fn grouped_second_order_replaces_all_columns_in_group() {
+        use salib_core::Group;
+        let groups = vec![
+            Group {
+                name: "AB".into(),
+                factor_indices: vec![0, 1],
+            },
+            Group {
+                name: "C".into(),
+                factor_indices: vec![2],
+            },
+        ];
+        let s = LhsSampler::classic(6);
+        let mut rng = fresh_rng();
+        let m = build_grouped_saltelli_matrix(&s, &groups, 32, true, &mut rng).unwrap();
+        let b_a = m.b_a.as_ref().expect("b_a should be Some");
+        assert_eq!(b_a.len(), 2);
+
+        // Group 0 B_A: B with columns 0,1 from A
+        for row in 0..32 {
+            assert_eq!(b_a[0][[row, 0]], m.a[[row, 0]]);
+            assert_eq!(b_a[0][[row, 1]], m.a[[row, 1]]);
+            assert_eq!(b_a[0][[row, 2]], m.b[[row, 2]]); // untouched
+        }
+
+        // Group 1 B_A: B with column 2 from A
+        for row in 0..32 {
+            assert_eq!(b_a[1][[row, 0]], m.b[[row, 0]]); // untouched
+            assert_eq!(b_a[1][[row, 1]], m.b[[row, 1]]); // untouched
+            assert_eq!(b_a[1][[row, 2]], m.a[[row, 2]]);
+        }
+    }
+
+    #[test]
+    fn grouped_singleton_equals_ungrouped() {
+        use salib_core::Group;
+        // Singleton groups: each group has exactly one factor.
+        // This should produce the same result as ungrouped.
+        let groups = vec![
+            Group {
+                name: "0".into(),
+                factor_indices: vec![0],
+            },
+            Group {
+                name: "1".into(),
+                factor_indices: vec![1],
+            },
+            Group {
+                name: "2".into(),
+                factor_indices: vec![2],
+            },
+        ];
+        let s = LhsSampler::classic(6);
+        let mut rng1 = fresh_rng();
+        let mut rng2 = fresh_rng();
+        let ungrouped = build_saltelli_matrix(&s, 32, false, &mut rng1).unwrap();
+        let grouped = build_grouped_saltelli_matrix(&s, &groups, 32, false, &mut rng2).unwrap();
+
+        assert_eq!(ungrouped.dim, grouped.dim);
+        assert_eq!(ungrouped.a, grouped.a);
+        assert_eq!(ungrouped.b, grouped.b);
+        for i in 0..3 {
+            assert_eq!(ungrouped.a_b[i], grouped.a_b[i]);
+        }
     }
 }

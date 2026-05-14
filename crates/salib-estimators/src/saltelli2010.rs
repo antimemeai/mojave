@@ -118,11 +118,44 @@ where
         total_order.push(s_t_i_num / d_var);
     }
 
+    // ── Second-order indices (Saltelli 2010 Eq d) ────────────────
+    //
+    // When the caller supplies B_Aⁱ matrices (the symmetric
+    // counterpart of A_Bⁱ), we compute S2_{ij} for every i < j:
+    //
+    //   V_{ij}  = (1/N) Σ_k [ fba[j][k] · fab[i][k] - fa[k] · fb[k] ]
+    //   S2_{ij} = V_{ij} / D  - S_i - S_j
+    //
+    // The indexing layout matches `SobolIndices.second_order`:
+    //   second_order[i][k] = S2_{i, i+k+1}   (upper triangle, row-major).
+    let second_order = matrix.b_a.as_ref().map(|b_a_matrices| {
+        // Evaluate model on each B_Aʲ matrix.
+        let fba: Vec<Vec<f64>> = b_a_matrices
+            .iter()
+            .map(|m| evaluate_rows(m, &model))
+            .collect();
+
+        let fa_fb: Vec<f64> = fa.iter().zip(fb.iter()).map(|(a, b)| a * b).collect();
+
+        let mut s2: Vec<Vec<f64>> = Vec::with_capacity(d);
+        for i in 0..d {
+            let mut row = Vec::with_capacity(d - i - 1);
+            for j in (i + 1)..d {
+                let cross: Vec<f64> = (0..n).map(|k| fba[j][k] * fab[i][k] - fa_fb[k]).collect();
+                let vij = tree_sum(&cross) / n_f;
+                let s2_ij = vij / d_var - first_order[i] - first_order[j];
+                row.push(s2_ij);
+            }
+            s2.push(row);
+        }
+        s2
+    });
+
     // Touch tree_var to surface a use; convergence-rate tests
     // compare against this for diagnostic purposes.
     let _diagnostic_var = tree_var(&fa);
 
-    SobolIndices::new(n, d, d_var, first_order, total_order)
+    SobolIndices::new(n, d, d_var, first_order, total_order, second_order)
 }
 
 /// Internal: call `model` on every row of an ndarray matrix and

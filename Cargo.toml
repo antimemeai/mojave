@@ -12,13 +12,14 @@ members = [
     "crates/salib-surrogate",
     "crates/salib-validation",
     "crates/seq-anytime-valid",
+    "crates/spc-charts",
 ]
 
 [workspace.package]
 edition = "2021"
 rust-version = "1.87"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/patrickbeam/evals"
+repository = "https://github.com/antimeme-ai/mojave"
 
 [workspace.lints.clippy]
 unwrap_used = "deny"

@@ -81,6 +81,49 @@ pub struct GTheoryResult {
     pub bootstrap_skipped: Option<usize>,
 }
 
+impl GTheoryResult {
+    /// Create a `GTheoryResult` from the core variance components and
+    /// coefficients, with all optional CI / bootstrap fields set to `None`.
+    ///
+    /// Nine parameters mirror the seven variance components plus two
+    /// reliability coefficients — a struct wrapper would add ceremony
+    /// without reducing cognitive load for a 1:1 field mapping.
+    #[must_use]
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_components(
+        sigma_p: f64,
+        sigma_i: f64,
+        sigma_r: f64,
+        sigma_pi: f64,
+        sigma_pr: f64,
+        sigma_ir: f64,
+        sigma_pir: f64,
+        g_coefficient: f64,
+        phi_coefficient: f64,
+    ) -> Self {
+        Self {
+            sigma_p,
+            sigma_i,
+            sigma_r,
+            sigma_pi,
+            sigma_pr,
+            sigma_ir,
+            sigma_pir,
+            g_coefficient,
+            phi_coefficient,
+            variance_component_ci_low: None,
+            variance_component_ci_high: None,
+            g_coefficient_ci_low: None,
+            g_coefficient_ci_high: None,
+            phi_coefficient_ci_low: None,
+            phi_coefficient_ci_high: None,
+            bootstrap_iterations: None,
+            bootstrap_alpha: None,
+            bootstrap_skipped: None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct DStudyPoint {
     pub n_items: usize,

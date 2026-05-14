@@ -46,8 +46,8 @@
 /// - `first_order.iter().sum::<f64>() <= 1.0` (sum of first-order
 ///   indices ≤ 1 for any well-defined Sobol' decomposition).
 ///
-/// The struct is `#[non_exhaustive]` — `second_order: Vec<Vec<f64>>`,
-/// `dummy_floor: Option<f64>` (Sobol' 2007 dummy-parameter floor),
+/// The struct is `#[non_exhaustive]` —
+/// `dummy_floor: Option<f64>` (Sobol' 2007 dummy-parameter floor)
 /// and other fields land non-breaking via follow-on ADRs.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
@@ -60,6 +60,10 @@ pub struct SobolIndicesAnalytic {
     /// `S_T_i = V_T_i / D` — per-factor total-order indices,
     /// indexed identically to `first_order`.
     pub total_order: Vec<f64>,
+    /// Closed-form `S2_{ij}` second-order indices. `second_order[i][k]`
+    /// = `S2_{i, i+k+1}` for `i < j` (upper-triangle, row-major).
+    /// `None` when second-order is not available for the function.
+    pub second_order: Option<Vec<Vec<f64>>>,
 }
 
 impl SobolIndicesAnalytic {
@@ -67,11 +71,17 @@ impl SobolIndicesAnalytic {
     /// validation. Test-function modules (`ishigami`, `sobol_g`,
     /// etc.) call this with closed-form-derived values.
     #[must_use]
-    pub fn new(total_variance: f64, first_order: Vec<f64>, total_order: Vec<f64>) -> Self {
+    pub fn new(
+        total_variance: f64,
+        first_order: Vec<f64>,
+        total_order: Vec<f64>,
+        second_order: Option<Vec<Vec<f64>>>,
+    ) -> Self {
         Self {
             total_variance,
             first_order,
             total_order,
+            second_order,
         }
     }
 
@@ -132,7 +142,7 @@ mod tests {
 
     #[test]
     fn new_preserves_fields() {
-        let s = SobolIndicesAnalytic::new(2.5, vec![0.3, 0.5], vec![0.4, 0.6]);
+        let s = SobolIndicesAnalytic::new(2.5, vec![0.3, 0.5], vec![0.4, 0.6], None);
         assert_eq!(s.total_variance, 2.5);
         assert_eq!(s.first_order, vec![0.3, 0.5]);
         assert_eq!(s.total_order, vec![0.4, 0.6]);
@@ -140,7 +150,7 @@ mod tests {
 
     #[test]
     fn dim_matches_factor_count() {
-        let s = SobolIndicesAnalytic::new(1.0, vec![0.1; 7], vec![0.2; 7]);
+        let s = SobolIndicesAnalytic::new(1.0, vec![0.1; 7], vec![0.2; 7], None);
         assert_eq!(s.dim(), 7);
     }
 }

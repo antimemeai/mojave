@@ -48,7 +48,7 @@
     clippy::expect_used
 )]
 
-use salib_core::tree_sum;
+use salib_core::{tree_sum, Group};
 use salib_samplers::MorrisTrajectories;
 
 /// Errors from Morris estimation. `#[non_exhaustive]`.
@@ -86,6 +86,15 @@ pub struct MorrisEffects {
     /// `σ_i = std(EE_i)` — sample standard deviation of elementary
     /// effects. High `σ_i` indicates non-linearity or interactions.
     pub sigma: Vec<f64>,
+    /// Grouped `μ` per group. `None` for ungrouped analyses.
+    pub grouped_mu: Option<Vec<f64>>,
+    /// Grouped `μ*` per group. `None` for ungrouped analyses.
+    pub grouped_mu_star: Option<Vec<f64>>,
+    /// Grouped `σ` per group. `None` for ungrouped analyses.
+    pub grouped_sigma: Option<Vec<f64>>,
+    /// Group names, parallel to `grouped_mu` / `grouped_mu_star` /
+    /// `grouped_sigma`. `None` for ungrouped analyses.
+    pub group_names: Option<Vec<String>>,
 }
 
 impl MorrisEffects {
@@ -108,6 +117,69 @@ impl MorrisEffects {
             mu,
             mu_star,
             sigma,
+            grouped_mu: None,
+            grouped_mu_star: None,
+            grouped_sigma: None,
+            group_names: None,
+        }
+    }
+
+    /// Construct with grouped effects. Same invariants as `new()`,
+    /// plus the grouped vectors must all have equal length.
+    ///
+    /// # Panics
+    ///
+    /// On length mismatches in per-factor or per-group vectors.
+    #[must_use]
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_grouped(
+        r: usize,
+        d: usize,
+        mu: Vec<f64>,
+        mu_star: Vec<f64>,
+        sigma: Vec<f64>,
+        grouped_mu: Vec<f64>,
+        grouped_mu_star: Vec<f64>,
+        grouped_sigma: Vec<f64>,
+        group_names: Vec<String>,
+    ) -> Self {
+        assert_eq!(mu.len(), d, "MorrisEffects::new_grouped: mu.len() != d");
+        assert_eq!(
+            mu_star.len(),
+            d,
+            "MorrisEffects::new_grouped: mu_star.len() != d"
+        );
+        assert_eq!(
+            sigma.len(),
+            d,
+            "MorrisEffects::new_grouped: sigma.len() != d"
+        );
+        let n_groups = group_names.len();
+        assert_eq!(
+            grouped_mu.len(),
+            n_groups,
+            "MorrisEffects::new_grouped: grouped_mu.len() != n_groups"
+        );
+        assert_eq!(
+            grouped_mu_star.len(),
+            n_groups,
+            "MorrisEffects::new_grouped: grouped_mu_star.len() != n_groups"
+        );
+        assert_eq!(
+            grouped_sigma.len(),
+            n_groups,
+            "MorrisEffects::new_grouped: grouped_sigma.len() != n_groups"
+        );
+        Self {
+            r,
+            d,
+            mu,
+            mu_star,
+            sigma,
+            grouped_mu: Some(grouped_mu),
+            grouped_mu_star: Some(grouped_mu_star),
+            grouped_sigma: Some(grouped_sigma),
+            group_names: Some(group_names),
         }
     }
 }
@@ -211,6 +283,158 @@ where
     }
 
     Ok(MorrisEffects::new(r, d, mu, mu_star, sigma))
+}
+
+/// Estimate grouped Morris elementary effects from a trajectory
+/// bundle produced by `build_grouped_morris_trajectories` and a
+/// model.
+///
+/// For each step `k = 0..n_groups-1`, identifies which GROUP was
+/// stepped (from `group_order`), computes the elementary effect
+/// `EE_g = (Y_{k+1} - Y_k) / Δ` (using the Δ of the first member
+/// factor in the group), and aggregates `μ`, `μ*`, `σ` per group.
+///
+/// Also computes per-factor effects (same as `estimate_morris_effects`
+/// but using a representative Δ per factor from the grouped
+/// trajectory).
+///
+/// # Errors
+///
+/// Returns `EmptyError::ZeroTrajectories` if `trajectories.r == 0`.
+#[allow(clippy::many_single_char_names)]
+pub fn estimate_grouped_morris_effects<F>(
+    trajectories: &MorrisTrajectories,
+    groups: &[Group],
+    model: F,
+) -> Result<MorrisEffects, EmptyError>
+where
+    F: Fn(&[f64]) -> f64,
+{
+    let r = trajectories.r;
+    let d = trajectories.d;
+    let n_groups = groups.len();
+
+    if r == 0 {
+        return Err(EmptyError::ZeroTrajectories);
+    }
+
+    let group_order = trajectories
+        .group_order
+        .as_ref()
+        .expect("estimate_grouped_morris_effects requires group_order (use build_grouped_morris_trajectories)");
+
+    // Per-group accumulator of elementary effects.
+    let mut group_ees: Vec<Vec<f64>> = vec![Vec::with_capacity(r); n_groups];
+
+    // Per-factor accumulators: for grouped Morris, each factor's EE
+    // is the same as the group's EE (since all factors in the group
+    // move simultaneously, the individual factor contribution cannot
+    // be separated). We record the group-level EE for each factor.
+    let mut factor_ees: Vec<Vec<f64>> = vec![Vec::with_capacity(r); d];
+
+    let mut row_buf = vec![0.0_f64; d];
+    for r_idx in 0..r {
+        // Evaluate model at point 0.
+        for (j, slot) in row_buf.iter_mut().enumerate() {
+            *slot = trajectories.trajectories[[r_idx, 0, j]];
+        }
+        let mut prev_y = model(&row_buf);
+
+        for k in 0..n_groups {
+            let group_idx = group_order[[r_idx, k]];
+            let group = &groups[group_idx];
+
+            // Use the delta of the first factor in the group as the
+            // representative delta for computing the group EE.
+            let rep_factor = group.factor_indices[0];
+            let delta = trajectories.deltas[[r_idx, rep_factor]];
+
+            for (j, slot) in row_buf.iter_mut().enumerate() {
+                *slot = trajectories.trajectories[[r_idx, k + 1, j]];
+            }
+            let cur_y = model(&row_buf);
+
+            let ee = (cur_y - prev_y) / delta;
+            group_ees[group_idx].push(ee);
+
+            // Record the same EE for each factor in the group.
+            for &factor_j in &group.factor_indices {
+                factor_ees[factor_j].push(ee);
+            }
+
+            prev_y = cur_y;
+        }
+    }
+
+    let r_f = r as f64;
+
+    // Per-factor reduction.
+    let mut mu = Vec::with_capacity(d);
+    let mut mu_star = Vec::with_capacity(d);
+    let mut sigma = Vec::with_capacity(d);
+
+    for ee_i in &factor_ees {
+        let mu_val = if ee_i.is_empty() {
+            0.0
+        } else {
+            tree_sum(ee_i) / r_f
+        };
+        mu.push(mu_val);
+
+        let abs_ee: Vec<f64> = ee_i.iter().map(|x| x.abs()).collect();
+        let mu_star_val = if abs_ee.is_empty() {
+            0.0
+        } else {
+            tree_sum(&abs_ee) / r_f
+        };
+        mu_star.push(mu_star_val);
+
+        let sigma_val = if ee_i.len() > 1 {
+            let centered_sq: Vec<f64> = ee_i.iter().map(|x| (x - mu_val).powi(2)).collect();
+            let var = tree_sum(&centered_sq) / (r_f - 1.0);
+            var.sqrt()
+        } else {
+            0.0
+        };
+        sigma.push(sigma_val);
+    }
+
+    // Per-group reduction.
+    let mut grouped_mu = Vec::with_capacity(n_groups);
+    let mut grouped_mu_star = Vec::with_capacity(n_groups);
+    let mut grouped_sigma = Vec::with_capacity(n_groups);
+
+    for ee_g in &group_ees {
+        let mu_val = tree_sum(ee_g) / r_f;
+        grouped_mu.push(mu_val);
+
+        let abs_ee: Vec<f64> = ee_g.iter().map(|x| x.abs()).collect();
+        let mu_star_val = tree_sum(&abs_ee) / r_f;
+        grouped_mu_star.push(mu_star_val);
+
+        let sigma_val = if r > 1 {
+            let centered_sq: Vec<f64> = ee_g.iter().map(|x| (x - mu_val).powi(2)).collect();
+            let var = tree_sum(&centered_sq) / (r_f - 1.0);
+            var.sqrt()
+        } else {
+            0.0
+        };
+        grouped_sigma.push(sigma_val);
+    }
+
+    let group_names: Vec<String> = groups.iter().map(|g| g.name.clone()).collect();
+
+    Ok(MorrisEffects::new_grouped(
+        r,
+        d,
+        mu,
+        mu_star,
+        sigma,
+        grouped_mu,
+        grouped_mu_star,
+        grouped_sigma,
+        group_names,
+    ))
 }
 
 #[cfg(test)]

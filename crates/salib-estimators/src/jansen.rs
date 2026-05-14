@@ -62,6 +62,10 @@ pub struct JansenIndices {
     pub first_order: Vec<f64>,
     /// Total variance estimated from the joint `(Y, Y^X)` samples.
     pub total_variance: f64,
+    /// Second-order indices `S2_{i,j}` for all `i < j`, laid out as
+    /// `second_order[i][k] = S2_{i, i+k+1}` (upper triangle, row-major).
+    /// `Some` only when the `SaltelliMatrix` supplies `b_a` matrices.
+    pub second_order: Option<Vec<Vec<f64>>>,
 }
 
 impl JansenIndices {
@@ -81,6 +85,7 @@ where
     let d = matrix.dim;
     let n_f = n as f64;
 
+    let fa = evaluate_rows(&matrix.a, &model);
     let y = evaluate_rows(&matrix.b, &model);
     let y_x: Vec<Vec<f64>> = matrix
         .a_b
@@ -112,9 +117,39 @@ where
         first_order.push(s_i);
     }
 
+    // ── Second-order indices (Saltelli 2010 Eq d) ────────────────
+    //
+    // When B_Aⁱ matrices are available, compute S2_{ij} for i < j:
+    //   V_{ij}  = (1/N) Σ_k [ fba[j][k] · fab[i][k] - fa[k] · fb[k] ]
+    //   S2_{ij} = V_{ij} / D  - S_i - S_j
+    //
+    // Layout: second_order[i][k] = S2_{i, i+k+1} (upper triangle).
+    let second_order = matrix.b_a.as_ref().map(|b_a_matrices| {
+        let fba: Vec<Vec<f64>> = b_a_matrices
+            .iter()
+            .map(|m| evaluate_rows(m, &model))
+            .collect();
+
+        let fa_fb: Vec<f64> = fa.iter().zip(y.iter()).map(|(a, b)| a * b).collect();
+
+        let mut s2: Vec<Vec<f64>> = Vec::with_capacity(d);
+        for i in 0..d {
+            let mut row = Vec::with_capacity(d - i - 1);
+            for j in (i + 1)..d {
+                let cross: Vec<f64> = (0..n).map(|k| fba[j][k] * y_x[i][k] - fa_fb[k]).collect();
+                let vij = tree_sum(&cross) / n_f;
+                let s2_ij = vij / total_variance - first_order[i] - first_order[j];
+                row.push(s2_ij);
+            }
+            s2.push(row);
+        }
+        s2
+    });
+
     JansenIndices {
         first_order,
         total_variance,
+        second_order,
     }
 }
 

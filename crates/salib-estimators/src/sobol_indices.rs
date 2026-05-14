@@ -8,8 +8,8 @@
 /// Sobol' first-order and total-order indices, point-estimate.
 /// Output of `estimate_saltelli2010` and friends.
 ///
-/// `#[non_exhaustive]` — future fields (`second_order: Vec<Vec<f64>>`,
-/// `dummy_floor: Option<f64>`, etc.) land non-breaking.
+/// `#[non_exhaustive]` — future fields (`dummy_floor: Option<f64>`,
+/// etc.) land non-breaking.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub struct SobolIndices {
@@ -24,6 +24,11 @@ pub struct SobolIndices {
     pub first_order: Vec<f64>,
     /// `S_Tᵢ` per factor.
     pub total_order: Vec<f64>,
+    /// `S2_{ij}` second-order indices. `second_order[i][j]` for `i < j`.
+    /// Indexed such that `second_order[i]` has length `dim - i - 1` and
+    /// `second_order[i][k]` = `S2_{i, i+k+1}`.
+    /// `None` when second-order was not requested.
+    pub second_order: Option<Vec<Vec<f64>>>,
 }
 
 impl SobolIndices {
@@ -36,6 +41,7 @@ impl SobolIndices {
         total_variance: f64,
         first_order: Vec<f64>,
         total_order: Vec<f64>,
+        second_order: Option<Vec<Vec<f64>>>,
     ) -> Self {
         Self {
             n,
@@ -43,6 +49,7 @@ impl SobolIndices {
             total_variance,
             first_order,
             total_order,
+            second_order,
         }
     }
 }
@@ -87,7 +94,7 @@ mod tests {
 
     #[test]
     fn sobol_indices_new_preserves_fields() {
-        let s = SobolIndices::new(64, 3, 12.5, vec![0.3, 0.5, 0.0], vec![0.4, 0.5, 0.2]);
+        let s = SobolIndices::new(64, 3, 12.5, vec![0.3, 0.5, 0.0], vec![0.4, 0.5, 0.2], None);
         assert_eq!(s.n, 64);
         assert_eq!(s.dim, 3);
         assert_eq!(s.total_variance, 12.5);

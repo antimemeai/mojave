@@ -37,6 +37,7 @@ rustfft = "6"
 nalgebra = "0.33"
 statrs = "0.18"
 thiserror = "2"
+salib-surrogate = { path = "../salib-surrogate" }
 
 [dev-dependencies]
 # End-to-end estimator tests use the analytic test functions from

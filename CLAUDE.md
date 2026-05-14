@@ -1,4 +1,4 @@
-# Project: Longitudinal SPC for Agent Evaluation
+# Project: mojave — measurement science for AI agents
 
 ## Repo structure
 
@@ -54,7 +54,7 @@ Extreme rigor baseline. No shortcuts.
 ## Key decisions made
 - Product: framework surfacing measurement questions + running ablations on customer infra
 - Market: defense establishment first, regulated industries follow
-- Name: TBD
+- Name: mojave (antimeme.ai)
 - saltelli-* crates → repack as standalone Rust GSA library (salib-rs or similar)
 - Prior project crates → quarantine, shop from as needed
 - IRR, sequential testing, adaptive testing, factor models → confirmed gaps to build

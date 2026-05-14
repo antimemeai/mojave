@@ -100,7 +100,7 @@ pub fn analytic_indices(a: &[f64]) -> SobolIndicesAnalytic {
     // Total-order: NOT computed in PR 4. Sentinel NaN.
     let total_order: Vec<f64> = vec![f64::NAN; d];
 
-    SobolIndicesAnalytic::new(total_variance, first_order, total_order)
+    SobolIndicesAnalytic::new(total_variance, first_order, total_order, None)
 }
 
 /// `Problem` of `dim` factors, each `Uniform(0, 1)`. Factor names are
