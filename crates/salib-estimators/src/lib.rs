@@ -72,6 +72,7 @@ pub mod bootstrap_given_data;
 pub mod borgonovo;
 pub mod dgsm;
 pub mod fast;
+pub mod fractional_factorial;
 pub mod g_theory;
 pub mod given_data_sobol;
 pub mod janon;
@@ -101,6 +102,7 @@ pub use dgsm::{
     PoincareError,
 };
 pub use fast::{estimate_fast, FastEstimatorError, FastIndices};
+pub use fractional_factorial::{estimate_fractional_factorial, FractionalFactorialEffects};
 pub use g_theory::{
     bootstrap_g_theory_pir, estimate_g_theory_pir, estimate_g_theory_pir_with_bootstrap,
     project_g_theory_d_study, DStudyPoint, GTheoryBootstrapError, GTheoryDesign, GTheoryError,
