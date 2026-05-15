@@ -102,6 +102,11 @@ impl Monitor {
         let value = outcome_to_f64(&record.outcome);
         let run_id_str = record.run_id.to_string();
 
+        let is_known = self.spc_state.contains_key(&series) || self.seq_state.contains_key(&series);
+        if !is_known && !self.config.auto_detect {
+            return Vec::new();
+        }
+
         let mut decisions = Vec::new();
 
         // Sequential monitoring
@@ -202,21 +207,19 @@ impl Monitor {
         }
 
         if let Some(snap) = last_snapshot {
-            let e_val = snap.e_value.unwrap_or(0.0);
+            let e_val = snap.e_value.unwrap_or(snap.log_likelihood_ratio.exp());
             let threshold = 1.0 / alpha;
 
             if e_val >= threshold {
                 state.stopped = true;
-                let ci = snap.confidence_interval.unwrap_or((f64::NAN, f64::NAN));
-                let mean = if state.observations.is_empty() {
-                    0.0
-                } else {
-                    state.observations.iter().sum::<f64>() / state.observations.len() as f64
-                };
+                let ci = snap
+                    .confidence_interval
+                    .unwrap_or((f64::NEG_INFINITY, f64::INFINITY));
+                let estimate = (ci.0 + ci.1) / 2.0;
                 return vec![Decision::StopEarly {
                     series: series.clone(),
                     evidence: e_val,
-                    estimate: mean,
+                    estimate,
                     ci,
                 }];
             }

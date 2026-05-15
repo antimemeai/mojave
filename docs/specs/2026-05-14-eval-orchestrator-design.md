@@ -186,14 +186,13 @@ pub enum IrrMetric {
 pub struct SequentialConfig {
     pub alpha: f64,               // default 0.05
     pub min_effect_size: f64,     // default 0.1 (smallest meaningful difference)
-    pub method: SequentialMethod, // default EValue
+    pub method: SequentialMethod, // default Msprt
+    pub mixing_variance: f64,     // MSPRT mixing variance, default 1.0
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SequentialMethod {
-    EValue,
     Msprt,
-    GroupSequential,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -202,7 +201,7 @@ pub struct SpcConfig {
     pub phase1_windows: usize,    // default 20
     pub window_size: WindowSize,  // default PerRun
     pub lambda: f64,              // EWMA smoothing, default 0.2
-    pub l: f64,                   // control limit width, default 3.0
+    pub l_sigma: f64,             // EWMA control limit width, default 2.962
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

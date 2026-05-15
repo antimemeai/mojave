@@ -46,7 +46,15 @@ impl IrrInstrument {
         // 3. Build matrix
         let matrix = match RatingMatrix::from_triples(&triples) {
             Ok(m) => m,
-            Err(_) => return (Vec::new(), None),
+            Err(_) => {
+                return (
+                    vec![Decision::MeasurementWarning {
+                        series: series.clone(),
+                        issue: MeasurementIssue::InsufficientSamples { have: 0, need: 1 },
+                    }],
+                    None,
+                );
+            }
         };
 
         // 4. Run metric (handle each error type separately)

@@ -96,9 +96,8 @@ impl SpcInstrument {
 
         let in_control = signals.iter().all(|s| !s.is_out_of_control());
 
-        // Compute display control limits (mu_0 +/- 3*sigma is conventional)
-        let cl_lower = mu_0 - 3.0 * sigma;
-        let cl_upper = mu_0 + 3.0 * sigma;
+        let cl_lower = mu_0 - config.spc.l_sigma * sigma;
+        let cl_upper = mu_0 + config.spc.l_sigma * sigma;
 
         let summary = SpcSummary {
             series: series.clone(),
@@ -227,7 +226,9 @@ fn run_phase2_ewma(
         Err(_) => return (Vec::new(), Vec::new()),
     };
 
-    observe_and_collect(series, phase2_windows, limits, |x| chart.observe(x))
+    observe_and_collect(series, phase2_windows, limits, config.spc.l_sigma, |x| {
+        chart.observe(x)
+    })
 }
 
 fn run_phase2_cusum(
@@ -241,7 +242,7 @@ fn run_phase2_cusum(
         Err(_) => return (Vec::new(), Vec::new()),
     };
 
-    observe_and_collect(series, phase2_windows, limits, |x| chart.observe(x))
+    observe_and_collect(series, phase2_windows, limits, 3.0, |x| chart.observe(x))
 }
 
 fn run_phase2_shewhart(
@@ -255,7 +256,7 @@ fn run_phase2_shewhart(
         Err(_) => return (Vec::new(), Vec::new()),
     };
 
-    observe_and_collect(series, phase2_windows, limits, |x| chart.observe(x))
+    observe_and_collect(series, phase2_windows, limits, 3.0, |x| chart.observe(x))
 }
 
 fn run_phase2_combined(
@@ -269,20 +270,21 @@ fn run_phase2_combined(
         Err(_) => return (Vec::new(), Vec::new()),
     };
 
-    observe_and_collect(series, phase2_windows, limits, |x| chart.observe(x))
+    observe_and_collect(series, phase2_windows, limits, 3.0, |x| chart.observe(x))
 }
 
 fn observe_and_collect(
     series: &SeriesKey,
     phase2_windows: &[WindowStat],
     limits: &ControlLimits,
+    l_sigma: f64,
     mut observe_fn: impl FnMut(f64) -> ChartSignal,
 ) -> (Vec<Decision>, Vec<ChartSignal>) {
     let mut decisions = Vec::new();
     let mut signals = Vec::new();
 
-    let cl_lower = limits.mu_0 - 3.0 * limits.sigma;
-    let cl_upper = limits.mu_0 + 3.0 * limits.sigma;
+    let cl_lower = limits.mu_0 - l_sigma * limits.sigma;
+    let cl_upper = limits.mu_0 + l_sigma * limits.sigma;
 
     for window in phase2_windows {
         let signal = observe_fn(window.mean);
