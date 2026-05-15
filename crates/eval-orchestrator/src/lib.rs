@@ -3,6 +3,7 @@
 
 pub mod config;
 pub mod instrument;
+pub mod instruments;
 pub mod outcome_ext;
 pub mod router;
 pub mod types;
