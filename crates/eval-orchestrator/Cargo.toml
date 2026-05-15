@@ -1,0 +1,30 @@
+[package]
+name = "eval-orchestrator"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = """
+Analysis routing + decision engine — wires eval-ingest output to
+the math crates (irr, seq-anytime-valid, spc-charts). Batch + streaming.
+"""
+
+[lib]
+path = "src/lib.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+eval-core = { path = "../eval-core" }
+irr = { path = "../irr" }
+seq-anytime-valid = { path = "../seq-anytime-valid" }
+spc-charts = { path = "../spc-charts" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+[dev-dependencies]
+ulid = { version = "1", features = ["serde"] }
