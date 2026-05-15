@@ -5,6 +5,7 @@ pub mod analyze;
 pub mod config;
 pub mod instrument;
 pub mod instruments;
+pub mod monitor;
 pub mod outcome_ext;
 pub mod router;
 pub mod types;
@@ -15,6 +16,7 @@ pub use config::{
     SpcChartType, SpcConfig, WindowSize,
 };
 pub use instrument::InstrumentId;
+pub use monitor::Monitor;
 pub use types::{
     AnalysisReport, Decision, IrrSummary, MeasurementIssue, MonitorSummary, OrchestratorError,
     SequentialSummary, SeriesKey, SpcSummary,
