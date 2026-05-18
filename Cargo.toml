@@ -10,6 +10,7 @@ members = [
     "crates/irr",
     "crates/metric-tck-harness",
     "crates/mojave-cli",
+    "crates/perturbation-engine",
     "crates/seq-anytime-valid",
     "crates/spc-charts",
 ]
