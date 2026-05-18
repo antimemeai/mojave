@@ -1,7 +1,7 @@
 ---
 id: BEAD-0018
 title: mojave-cli — unified CLI entry point
-status: open
+status: closed
 priority: high
 created: 2026-05-18
 ---
@@ -23,4 +23,4 @@ Single `mojave` binary providing the CLI entry point to the entire measurement e
 - [x] CLI smoke tests (assert_cmd)
 - [x] TCK Gherkin feature file
 - [x] Clippy zero warnings, rustfmt clean
-- [ ] Full workspace test suite passes
+- [x] Full workspace test suite passes
