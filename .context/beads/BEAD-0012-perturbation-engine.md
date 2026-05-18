@@ -1,28 +1,49 @@
 ---
 id: BEAD-0012
 title: Perturbation engine (systematic eval robustness testing)
-status: open
+status: closed
 priority: nice-to-have
 created: 2026-05-11
+closed: 2026-05-18
 ---
 
 ## Description
 
 Systematic perturbation of eval conditions to measure robustness. Maps the boundary between "agent can do this" and "agent does this under these conditions." Disposition profile measurement.
 
-## What exists (in quarantine)
+## What was built
 
-- paraphrase-proxy: LLM-based prompt rewriting
-- format-spread-proxy: formatting perturbations (separator, casing, punctuation atoms)
-- multi-turn-perturbation: conversation reordering, truncation, injection
+`crates/perturbation-engine` — standalone crate consolidating three atom families:
 
-## Theoretical grounding
+### Format atoms (`format` module)
+- `Separator` (ColonSpace/Newline/ArrowSpace), `Casing` (Original/Upper/Lower), `Punctuation` (Question/Period/None), `Padding` (Original/QuotesEnclose/NewlinesPrepend/NewlinesAppend/NewlinesBoth)
+- `FormatAtoms::from_seed(u64)` — deterministic sampling via ChaCha20Rng
+- `longest_string_region(&[u8])` — schema-agnostic longest-quoted-string finder
+- `apply_atoms(body, atoms, region)` — transform pipeline: casing → separator → punctuation → padding
+- `signed_confound: false` — format perturbations should NOT change scores
 
-- Voudouris et al. 2026: capabilities as dispositional properties, mapped via systematic context variation
-- Sensitivity analysis (salib-rs): Sobol indices on perturbation factors quantify what drives score variance
+### Paraphrase atoms (`paraphrase` module)
+- `ParaphraseModel` (Mini/Standard/Frontier), `ParaphraseStrength` (Mild/Moderate/Aggressive)
+- `ParaphraseAtoms::from_seed(u64)` — deterministic sampling
+- `signed_confound: true` — paraphrase perturbations may change scores
 
-## When to revisit
+### Multi-turn atoms (`multi_turn` module)
+- `MultiTurnAtom`: Original, TruncateEarly, Reorder, Inject
+- `MultiTurnPlan` — validated plan with history + params per atom
+- `apply(plan, seed)` — deterministic perturbation execution
+- `signed_confound: true` — all multi-turn perturbations may change scores
 
-- After orchestration layer can run experiments
-- Connects naturally to sensitivity analysis (already built) and ablation scheduling
-- The conex adapters in quarantine are reference implementations, not production code
+### Cross-cutting
+- All enums `#[non_exhaustive]` + `Serialize`/`Deserialize`
+- `factor_str()` on every atom for sensitivity analysis bridge
+- 39 unit tests covering determinism, validation, transform correctness
+
+## Acceptance criteria met
+
+- [x] Three atom families ported from quarantine conex adapters
+- [x] Deterministic seeding via ChaCha20Rng
+- [x] `signed_confound` flag on all perturbation outputs
+- [x] `factor_str()` flat keys for sensitivity bridge
+- [x] Validation on multi-turn plans (empty history, bounds, etc.)
+- [x] Schema-agnostic body walk (no JSON parsing dependency)
+- [x] All tests pass, clippy clean, workspace lints satisfied
