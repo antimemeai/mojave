@@ -1,0 +1,27 @@
+[package]
+name = "audit-sign"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Ed25519 signing and COSE_Sign1 attestation for audit chains"
+
+[dependencies]
+audit-chain = { path = "../audit-chain" }
+chrono = { version = "0.4", features = ["serde"] }
+ciborium = "0.2"
+coset = "0.3"
+ed25519-dalek = { version = "2", features = ["pkcs8", "pem", "rand_core"] }
+rand_core = { version = "0.6", features = ["getrandom"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+signature = "2"
+thiserror = "2"
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true
