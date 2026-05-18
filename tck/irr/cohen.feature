@@ -88,7 +88,7 @@ Feature: Cohen kappa
     When I compute Cohen kappa
     Then I get a Cohen error about unequal length
 
-  Scenario: All-same-category is degenerate
+  Scenario: All-same-category yields perfect agreement
     Given two raters who both assign category 0 to all 20 items
     When I compute Cohen kappa
-    Then I get a Cohen error about degenerate data
+    Then Cohen kappa is approximately 1.0 with tolerance 0.001

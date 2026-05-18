@@ -10,6 +10,8 @@ pub enum CohenError {
     DegenerateData,
     #[error("Cohen kappa requires exactly 2 raters, got {0}")]
     NotTwoRaters(usize),
+    #[error("invalid weight function: weight(c, c) must equal 0 for all observed categories")]
+    InvalidWeightFunction,
 }
 
 struct Validated {
@@ -56,6 +58,20 @@ pub fn kappa(rater1: &[u32], rater2: &[u32]) -> Result<IrrResult, CohenError> {
         })
         .sum();
 
+    // Perfect observed agreement: semantically kappa = 1.0 regardless of p_e.
+    // This handles the 0/0 case when p_e is also 1.0.
+    if (1.0 - p_o).abs() < 1e-15 {
+        return Ok(IrrResult {
+            statistic_name: "cohen_kappa".to_string(),
+            value: 1.0,
+            ci_lower: None,
+            ci_upper: None,
+            n_items: rater1.len(),
+            n_raters: 2,
+            metric_level: Some(MetricLevel::Nominal),
+        });
+    }
+
     if (1.0 - p_e).abs() < 1e-15 {
         return Err(CohenError::DegenerateData);
     }
@@ -86,12 +102,33 @@ pub fn weighted_kappa(
 ) -> Result<IrrResult, CohenError> {
     let v = validate(rater1, rater2)?;
 
+    // Validate weight_fn(c, c) == 0 for all observed categories.
+    for &c in &v.categories {
+        let w = weight_fn(c, c);
+        if w.abs() >= 1e-15 {
+            return Err(CohenError::InvalidWeightFunction);
+        }
+    }
+
     let w_o: f64 = rater1
         .iter()
         .zip(rater2.iter())
         .map(|(&a, &b)| weight_fn(a, b))
         .sum::<f64>()
         / v.n;
+
+    // Perfect agreement: no weighted disagreement means kappa = 1.0.
+    if w_o.abs() < 1e-15 {
+        return Ok(IrrResult {
+            statistic_name: "weighted_cohen_kappa".to_string(),
+            value: 1.0,
+            ci_lower: None,
+            ci_upper: None,
+            n_items: rater1.len(),
+            n_raters: 2,
+            metric_level: Some(level),
+        });
+    }
 
     let w_e: f64 = v
         .categories
