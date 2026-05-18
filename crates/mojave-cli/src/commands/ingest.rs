@@ -33,6 +33,36 @@ pub struct SourceMetaOutput {
     pub original_path: Option<String>,
 }
 
+fn warning_kind_tag(kind: &eval_ingest::types::WarningKind) -> String {
+    use eval_ingest::types::WarningKind;
+    match kind {
+        WarningKind::EmptyTaskId => "empty_task_id".into(),
+        WarningKind::EmptyAgentId => "empty_agent_id".into(),
+        WarningKind::TimestampTooOld(_) => "timestamp_too_old".into(),
+        WarningKind::TimestampInFuture(_) => "timestamp_in_future".into(),
+        WarningKind::NonFiniteScore(_) => "non_finite_score".into(),
+        WarningKind::NonFiniteCriterion { .. } => "non_finite_criterion".into(),
+        WarningKind::UnknownScorer => "unknown_scorer".into(),
+        WarningKind::ParseError(_) => "parse_error".into(),
+    }
+}
+
+fn warning_kind_message(kind: &eval_ingest::types::WarningKind) -> String {
+    use eval_ingest::types::WarningKind;
+    match kind {
+        WarningKind::EmptyTaskId => "task_id field is empty".into(),
+        WarningKind::EmptyAgentId => "agent_id field is empty".into(),
+        WarningKind::TimestampTooOld(ts) => format!("timestamp {ts} is before 2020-01-01"),
+        WarningKind::TimestampInFuture(ts) => format!("timestamp {ts} is more than 24h in future"),
+        WarningKind::NonFiniteScore(v) => format!("score value {v} is not finite"),
+        WarningKind::NonFiniteCriterion { key, value } => {
+            format!("criterion '{key}' has non-finite value {value}")
+        }
+        WarningKind::UnknownScorer => "scorer name could not be determined".into(),
+        WarningKind::ParseError(msg) => format!("parse error: {msg}"),
+    }
+}
+
 pub fn run_ingest(
     paths: &[PathBuf],
     format_flag: &str,
@@ -83,8 +113,8 @@ pub fn run_ingest(
 
         for w in &result.warnings {
             all_warnings.push(WarningOutput {
-                kind: format!("{:?}", w.kind),
-                message: format!("{:?}", w.kind),
+                kind: warning_kind_tag(&w.kind),
+                message: warning_kind_message(&w.kind),
                 source_index: w.source_index,
             });
         }

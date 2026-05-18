@@ -19,7 +19,7 @@ pub fn load_config(
             serde_json::from_value(merged).map_err(|e| ConfigError::ParseError(e.to_string()))?;
     }
 
-    apply_overrides(&mut config, overrides);
+    apply_overrides(&mut config, overrides)?;
     Ok(config)
 }
 
@@ -44,14 +44,10 @@ pub fn load_monitor_config(
         config.irr.threshold = v;
     }
     if let Some(ref m) = overrides.irr_metric {
-        if let Some(parsed) = parse_irr_metric(m) {
-            config.irr.metric = parsed;
-        }
+        config.irr.metric = parse_irr_metric(m)?;
     }
     if let Some(ref ct) = overrides.spc_chart {
-        if let Some(parsed) = parse_spc_chart(ct) {
-            config.spc.chart_type = parsed;
-        }
+        config.spc.chart_type = parse_spc_chart(ct)?;
     }
     if let Some(v) = overrides.spc_phase1_windows {
         config.spc.phase1_windows = v;
@@ -87,19 +83,18 @@ fn merge_json(base: serde_json::Value, patch: serde_json::Value) -> serde_json::
     }
 }
 
-fn apply_overrides(config: &mut AnalysisConfig, overrides: &ConfigOverrides) {
+fn apply_overrides(
+    config: &mut AnalysisConfig,
+    overrides: &ConfigOverrides,
+) -> Result<(), ConfigError> {
     if let Some(v) = overrides.irr_threshold {
         config.irr.threshold = v;
     }
     if let Some(ref m) = overrides.irr_metric {
-        if let Some(parsed) = parse_irr_metric(m) {
-            config.irr.metric = parsed;
-        }
+        config.irr.metric = parse_irr_metric(m)?;
     }
     if let Some(ref ct) = overrides.spc_chart {
-        if let Some(parsed) = parse_spc_chart(ct) {
-            config.spc.chart_type = parsed;
-        }
+        config.spc.chart_type = parse_spc_chart(ct)?;
     }
     if let Some(v) = overrides.spc_phase1_windows {
         config.spc.phase1_windows = v;
@@ -113,24 +108,29 @@ fn apply_overrides(config: &mut AnalysisConfig, overrides: &ConfigOverrides) {
     if let Some(ref fd) = overrides.force_disable {
         config.force_disable = fd.split(',').map(|s| s.trim().to_string()).collect();
     }
+    Ok(())
 }
 
-fn parse_irr_metric(s: &str) -> Option<IrrMetric> {
+fn parse_irr_metric(s: &str) -> Result<IrrMetric, ConfigError> {
     match s.to_lowercase().as_str() {
-        "krippendorff" => Some(IrrMetric::Krippendorff),
-        "fleiss" => Some(IrrMetric::Fleiss),
-        "gwet" => Some(IrrMetric::Gwet),
-        _ => None,
+        "krippendorff" => Ok(IrrMetric::Krippendorff),
+        "fleiss" => Ok(IrrMetric::Fleiss),
+        "gwet" => Ok(IrrMetric::Gwet),
+        _ => Err(ConfigError::ParseError(format!(
+            "unknown IRR metric '{s}' (valid: krippendorff, fleiss, gwet)"
+        ))),
     }
 }
 
-fn parse_spc_chart(s: &str) -> Option<SpcChartType> {
+fn parse_spc_chart(s: &str) -> Result<SpcChartType, ConfigError> {
     match s.to_lowercase().as_str() {
-        "ewma" => Some(SpcChartType::Ewma),
-        "cusum" => Some(SpcChartType::Cusum),
-        "shewhart" => Some(SpcChartType::Shewhart),
-        "combined" => Some(SpcChartType::Combined),
-        _ => None,
+        "ewma" => Ok(SpcChartType::Ewma),
+        "cusum" => Ok(SpcChartType::Cusum),
+        "shewhart" => Ok(SpcChartType::Shewhart),
+        "combined" => Ok(SpcChartType::Combined),
+        _ => Err(ConfigError::ParseError(format!(
+            "unknown SPC chart type '{s}' (valid: ewma, cusum, shewhart, combined)"
+        ))),
     }
 }
 
@@ -203,23 +203,17 @@ mod tests {
     fn parse_irr_metric_variants() {
         assert!(matches!(
             parse_irr_metric("krippendorff"),
-            Some(IrrMetric::Krippendorff)
+            Ok(IrrMetric::Krippendorff)
         ));
-        assert!(matches!(
-            parse_irr_metric("Fleiss"),
-            Some(IrrMetric::Fleiss)
-        ));
-        assert!(matches!(parse_irr_metric("gwet"), Some(IrrMetric::Gwet)));
-        assert!(parse_irr_metric("bogus").is_none());
+        assert!(matches!(parse_irr_metric("Fleiss"), Ok(IrrMetric::Fleiss)));
+        assert!(matches!(parse_irr_metric("gwet"), Ok(IrrMetric::Gwet)));
+        assert!(parse_irr_metric("bogus").is_err());
     }
 
     #[test]
     fn parse_spc_chart_variants() {
-        assert!(matches!(parse_spc_chart("ewma"), Some(SpcChartType::Ewma)));
-        assert!(matches!(
-            parse_spc_chart("CUSUM"),
-            Some(SpcChartType::Cusum)
-        ));
-        assert!(parse_spc_chart("bogus").is_none());
+        assert!(matches!(parse_spc_chart("ewma"), Ok(SpcChartType::Ewma)));
+        assert!(matches!(parse_spc_chart("CUSUM"), Ok(SpcChartType::Cusum)));
+        assert!(parse_spc_chart("bogus").is_err());
     }
 }

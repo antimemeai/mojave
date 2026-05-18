@@ -33,8 +33,6 @@ enum Commands {
         paths: Vec<std::path::PathBuf>,
         #[arg(long)]
         config: Option<std::path::PathBuf>,
-        #[arg(long, default_value = "json")]
-        format: String,
         #[arg(long)]
         irr_threshold: Option<f64>,
         #[arg(long)]
@@ -56,8 +54,6 @@ enum Commands {
         watch: Option<std::path::PathBuf>,
         #[arg(long)]
         config: Option<std::path::PathBuf>,
-        #[arg(long, default_value = "json")]
-        format: String,
         #[arg(long)]
         irr_threshold: Option<f64>,
         #[arg(long)]
@@ -113,7 +109,6 @@ fn main() {
         Commands::Analyze {
             paths,
             config,
-            format: _,
             irr_threshold,
             irr_metric,
             spc_chart,
@@ -143,7 +138,6 @@ fn main() {
         Commands::Monitor {
             watch,
             config,
-            format: _,
             irr_threshold,
             irr_metric,
             spc_chart,
@@ -194,6 +188,11 @@ fn main() {
 
     if let Err(e) = result {
         write_error(&e);
-        std::process::exit(1);
+        let code = if matches!(e, mojave_cli::error::CliError::Usage(_)) {
+            2
+        } else {
+            1
+        };
+        std::process::exit(code);
     }
 }

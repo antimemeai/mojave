@@ -6,6 +6,7 @@ pub enum CliError {
     Orchestrator(eval_orchestrator::OrchestratorError),
     Config(ConfigError),
     Io(std::io::Error),
+    Usage(String),
 }
 
 #[derive(Debug)]
@@ -21,6 +22,7 @@ impl fmt::Display for CliError {
             CliError::Orchestrator(e) => write!(f, "{e}"),
             CliError::Config(e) => write!(f, "{e}"),
             CliError::Io(e) => write!(f, "{e}"),
+            CliError::Usage(msg) => write!(f, "{msg}"),
         }
     }
 }
@@ -68,6 +70,7 @@ impl CliError {
             CliError::Orchestrator(_) => "orchestrator_error",
             CliError::Config(_) => "config_error",
             CliError::Io(_) => "io_error",
+            CliError::Usage(_) => "usage_error",
         }
     }
 }

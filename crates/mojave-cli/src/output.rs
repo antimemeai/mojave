@@ -51,9 +51,12 @@ impl AnalyzeOutput {
 }
 
 pub fn write_json<T: Serialize>(value: &T) -> Result<(), crate::error::CliError> {
+    use std::io::Write;
     let json = serde_json::to_string_pretty(value)
         .map_err(|e| crate::error::CliError::Io(std::io::Error::other(e.to_string())))?;
-    println!("{json}");
+    let stdout = std::io::stdout();
+    let mut lock = stdout.lock();
+    writeln!(lock, "{json}")?;
     Ok(())
 }
 
