@@ -140,9 +140,42 @@ fn main() {
                 }
             }
         }
-        Commands::Monitor { .. } => {
-            eprintln!("mojave monitor: not yet implemented");
-            std::process::exit(2);
+        Commands::Monitor {
+            watch,
+            config,
+            format: _,
+            irr_threshold,
+            irr_metric,
+            spc_chart,
+            spc_phase1_windows,
+            sequential_alpha,
+        } => {
+            let overrides = ConfigOverrides {
+                irr_threshold,
+                irr_metric,
+                spc_chart,
+                spc_phase1_windows,
+                sequential_alpha,
+                force_enable: None,
+                force_disable: None,
+            };
+            let result = match watch {
+                Some(path) => mojave_cli::commands::monitor::run_monitor_watch(
+                    &path,
+                    config.as_deref(),
+                    &overrides,
+                ),
+                None => {
+                    mojave_cli::commands::monitor::run_monitor_stdin(config.as_deref(), &overrides)
+                }
+            };
+            match result {
+                Ok(()) => Ok(()),
+                Err(e) => {
+                    write_error(&e);
+                    std::process::exit(1);
+                }
+            }
         }
         Commands::Sensitivity { .. } => {
             eprintln!("mojave sensitivity: not yet implemented");
