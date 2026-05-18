@@ -5,6 +5,7 @@ members = [
     "crates/audit-sign",
     "crates/change-attribution",
     "crates/eval-core",
+    "crates/eval-design",
     "crates/eval-ingest",
     "crates/eval-orchestrator",
     "crates/irr",

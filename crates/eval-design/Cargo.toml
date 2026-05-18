@@ -1,0 +1,17 @@
+[package]
+name = "eval-design"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Game-theoretic evaluation design: randomized item selection and anti-gaming scheduling"
+
+[dependencies]
+rand = "0.9"
+rand_chacha = "0.9"
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+
+[lints]
+workspace = true
