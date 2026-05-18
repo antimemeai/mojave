@@ -1,6 +1,8 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/audit-chain",
+    "crates/audit-sign",
     "crates/eval-core",
     "crates/eval-ingest",
     "crates/eval-orchestrator",
