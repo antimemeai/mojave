@@ -23,6 +23,7 @@ eval-ingest = { path = "../eval-ingest" }
 eval-orchestrator = { path = "../eval-orchestrator" }
 eval-core = { path = "../eval-core" }
 clap = { version = "4", features = ["derive"] }
+clap_complete = "4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9"

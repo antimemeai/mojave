@@ -1,6 +1,10 @@
 #![forbid(unsafe_code)]
 
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
+use clap_complete::Shell;
+use mojave_cli::commands::{analyze, ingest};
+use mojave_cli::config::ConfigOverrides;
+use mojave_cli::output::{write_error, write_json};
 
 #[derive(Parser)]
 #[command(name = "mojave", about = "Measurement engine for AI agent evaluation")]
@@ -70,6 +74,12 @@ enum Commands {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
+    /// Generate shell completion scripts
+    Completions {
+        /// Shell to generate completions for: bash, zsh, fish, powershell, elvish
+        #[arg(value_enum)]
+        shell: Shell,
+    },
 }
 
 fn main() {
@@ -85,22 +95,67 @@ fn main() {
             .init();
     }
 
-    match cli.command {
-        Commands::Ingest { .. } => {
-            eprintln!("mojave ingest: not yet implemented");
-            std::process::exit(2)
+    let result = match cli.command {
+        Commands::Ingest {
+            paths,
+            format,
+            field_mapping,
+        } => {
+            let output = ingest::run_ingest(&paths, &format, field_mapping.as_deref());
+            match output {
+                Ok(out) => write_json(&out),
+                Err(e) => {
+                    write_error(&e);
+                    std::process::exit(1);
+                }
+            }
         }
-        Commands::Analyze { .. } => {
-            eprintln!("mojave analyze: not yet implemented");
-            std::process::exit(2)
+        Commands::Analyze {
+            paths,
+            config,
+            format: _,
+            irr_threshold,
+            irr_metric,
+            spc_chart,
+            spc_phase1_windows,
+            sequential_alpha,
+            force_enable,
+            force_disable,
+        } => {
+            let overrides = ConfigOverrides {
+                irr_threshold,
+                irr_metric,
+                spc_chart,
+                spc_phase1_windows,
+                sequential_alpha,
+                force_enable,
+                force_disable,
+            };
+            let output = analyze::run_analyze(&paths, config.as_deref(), &overrides);
+            match output {
+                Ok(out) => write_json(&out),
+                Err(e) => {
+                    write_error(&e);
+                    std::process::exit(1);
+                }
+            }
         }
         Commands::Monitor { .. } => {
             eprintln!("mojave monitor: not yet implemented");
-            std::process::exit(2)
+            std::process::exit(2);
         }
         Commands::Sensitivity { .. } => {
             eprintln!("mojave sensitivity: not yet implemented");
-            std::process::exit(2)
+            std::process::exit(2);
         }
+        Commands::Completions { shell } => {
+            clap_complete::generate(shell, &mut Cli::command(), "mojave", &mut std::io::stdout());
+            Ok(())
+        }
+    };
+
+    if let Err(e) = result {
+        write_error(&e);
+        std::process::exit(1);
     }
 }
