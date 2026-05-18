@@ -138,10 +138,10 @@ impl Padding {
     pub fn apply(self, s: &str) -> String {
         match self {
             Self::Original => s.to_owned(),
-            Self::QuotesEnclose => format!(r#"\"{s}\""#),
-            Self::NewlinesPrepend => format!(r#"\n\n{s}"#),
-            Self::NewlinesAppend => format!(r#"{s}\n\n"#),
-            Self::NewlinesBoth => format!(r#"\n\n{s}\n\n"#),
+            Self::QuotesEnclose => format!("\"{s}\""),
+            Self::NewlinesPrepend => format!("\n\n{s}"),
+            Self::NewlinesAppend => format!("{s}\n\n"),
+            Self::NewlinesBoth => format!("\n\n{s}\n\n"),
         }
     }
 
@@ -243,10 +243,10 @@ mod tests {
     #[test]
     fn padding_apply_variants() {
         assert_eq!(Padding::Original.apply("hi"), "hi");
-        assert_eq!(Padding::QuotesEnclose.apply("hi"), r#"\"hi\""#);
-        assert_eq!(Padding::NewlinesPrepend.apply("hi"), r#"\n\nhi"#);
-        assert_eq!(Padding::NewlinesAppend.apply("hi"), r#"hi\n\n"#);
-        assert_eq!(Padding::NewlinesBoth.apply("hi"), r#"\n\nhi\n\n"#);
+        assert_eq!(Padding::QuotesEnclose.apply("hi"), "\"hi\"");
+        assert_eq!(Padding::NewlinesPrepend.apply("hi"), "\n\nhi");
+        assert_eq!(Padding::NewlinesAppend.apply("hi"), "hi\n\n");
+        assert_eq!(Padding::NewlinesBoth.apply("hi"), "\n\nhi\n\n");
     }
 
     #[test]

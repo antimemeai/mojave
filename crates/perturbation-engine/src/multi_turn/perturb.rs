@@ -18,6 +18,7 @@ pub enum PerturbationError {
     Validation(#[from] MultiTurnValidationError),
 }
 
+#[must_use = "returns the perturbed conversation history; discarding it loses the perturbation"]
 pub fn apply(plan: &MultiTurnPlan, seed: u64) -> Result<AppliedPerturbation, PerturbationError> {
     plan.validate()?;
 
