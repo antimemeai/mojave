@@ -6,13 +6,6 @@ members = [
     "crates/eval-orchestrator",
     "crates/irr",
     "crates/metric-tck-harness",
-    "crates/salib-cli",
-    "crates/salib-core",
-    "crates/salib-estimators",
-    "crates/salib-samplers",
-    "crates/salib-shapley",
-    "crates/salib-surrogate",
-    "crates/salib-validation",
     "crates/seq-anytime-valid",
     "crates/spc-charts",
 ]
