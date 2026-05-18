@@ -1,0 +1,41 @@
+[package]
+name = "mojave-cli"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = """
+mojave — measurement engine CLI. Ingest eval logs, run batch analysis,
+stream monitoring, and sensitivity analysis from one binary.
+"""
+
+[[bin]]
+name = "mojave"
+path = "src/main.rs"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+eval-ingest = { path = "../eval-ingest" }
+eval-orchestrator = { path = "../eval-orchestrator" }
+eval-core = { path = "../eval-core" }
+clap = { version = "4", features = ["derive"] }
+clap_complete = "4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
+
+[dev-dependencies]
+assert_cmd = "2"
+predicates = "3"
+spc-charts = { path = "../spc-charts" }
+tempfile = "3"
+ulid = "1"
+
+[lints]
+workspace = true
