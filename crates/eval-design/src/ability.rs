@@ -1,5 +1,4 @@
-use crate::information::{fisher_information, prob_correct};
-use crate::item_pool::ItemMetadata;
+use crate::information::prob_correct;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum EstimationMethod {
@@ -37,11 +36,9 @@ pub fn mle(items: &[AdminItem]) -> Option<AbilityEstimate> {
     if items.is_empty() {
         return None;
     }
-    // All-correct or all-incorrect with < 2 items — MLE undefined
+    // All-correct or all-incorrect — MLE undefined (complete separation)
     let sum_resp: f64 = items.iter().map(|i| i.response).sum();
-    if (sum_resp < f64::EPSILON || (sum_resp - items.len() as f64).abs() < f64::EPSILON)
-        && items.len() < 3
-    {
+    if sum_resp < f64::EPSILON || (sum_resp - items.len() as f64).abs() < f64::EPSILON {
         return None;
     }
 
@@ -85,14 +82,17 @@ pub fn mle(items: &[AdminItem]) -> Option<AbilityEstimate> {
 }
 
 /// EAP (Expected A Posteriori) via quadrature with normal prior.
+///
+/// Uses the log-sum-exp trick to prevent underflow when many items
+/// cause log-posterior values to be extremely negative at most grid points.
 pub fn eap(items: &[AdminItem], prior_mean: f64, prior_sd: f64) -> AbilityEstimate {
     let step = (EAP_GRID_RANGE.1 - EAP_GRID_RANGE.0) / (EAP_GRID_POINTS as f64 - 1.0);
 
-    let mut numerator = 0.0;
-    let mut denominator = 0.0;
-    let mut second_moment = 0.0;
+    // First pass: compute log-posteriors and find the maximum
+    let mut log_posteriors = [0.0_f64; EAP_GRID_POINTS];
+    let mut max_log_posterior = f64::NEG_INFINITY;
 
-    for i in 0..EAP_GRID_POINTS {
+    for (i, lp) in log_posteriors.iter_mut().enumerate() {
         let theta = EAP_GRID_RANGE.0 + step * i as f64;
 
         // Log-likelihood
@@ -109,8 +109,20 @@ pub fn eap(items: &[AdminItem], prior_mean: f64, prior_sd: f64) -> AbilityEstima
         let z = (theta - prior_mean) / prior_sd;
         let log_prior = -0.5 * z * z;
 
-        let log_posterior = log_l + log_prior;
-        let w = log_posterior.exp();
+        *lp = log_l + log_prior;
+        if *lp > max_log_posterior {
+            max_log_posterior = *lp;
+        }
+    }
+
+    // Second pass: exponentiate with log-sum-exp trick (subtract max before exp)
+    let mut numerator = 0.0;
+    let mut denominator = 0.0;
+    let mut second_moment = 0.0;
+
+    for (i, lp) in log_posteriors.iter().enumerate() {
+        let theta = EAP_GRID_RANGE.0 + step * i as f64;
+        let w = (lp - max_log_posterior).exp();
 
         numerator += theta * w;
         second_moment += theta * theta * w;
@@ -167,13 +179,11 @@ pub fn total_information_at(theta: f64, items: &[AdminItem]) -> f64 {
     items
         .iter()
         .map(|item| {
-            let meta = ItemMetadata::new(
-                crate::item_pool::ItemId::new("_tmp"),
-                item.difficulty,
-                item.discrimination,
-                String::new(),
-            );
-            fisher_information(theta, &meta)
+            // AdminItem discrimination is already validated at construction time
+            // via ItemMetadata, so this will not fail for valid sessions.
+            // Use the raw formula directly to avoid needing ItemMetadata construction.
+            let p = prob_correct(theta, item.difficulty, item.discrimination);
+            item.discrimination * item.discrimination * p * (1.0 - p)
         })
         .sum()
 }

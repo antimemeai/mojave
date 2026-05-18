@@ -82,6 +82,7 @@ mod tests {
             discrimination,
             "test".into(),
         )
+        .unwrap()
     }
 
     #[test]

@@ -21,16 +21,34 @@ pub struct ItemMetadata {
 }
 
 impl ItemMetadata {
-    #[must_use]
-    pub fn new(id: ItemId, difficulty: f64, discrimination: f64, content_domain: String) -> Self {
-        Self {
+    /// Create a new item with validated parameters.
+    ///
+    /// # Errors
+    /// Returns `ItemError::InvalidDiscrimination` if discrimination is not positive (> 0.0).
+    pub fn new(
+        id: ItemId,
+        difficulty: f64,
+        discrimination: f64,
+        content_domain: String,
+    ) -> Result<Self, ItemError> {
+        if discrimination.is_nan() || discrimination <= 0.0 {
+            return Err(ItemError::InvalidDiscrimination(discrimination));
+        }
+        Ok(Self {
             id,
             difficulty,
             discrimination,
             content_domain,
             exposure_count: 0,
-        }
+        })
     }
+}
+
+#[derive(Debug, Clone, thiserror::Error)]
+#[non_exhaustive]
+pub enum ItemError {
+    #[error("discrimination must be positive, got {0}")]
+    InvalidDiscrimination(f64),
 }
 
 #[derive(Debug, Clone, thiserror::Error)]
@@ -117,11 +135,11 @@ mod tests {
 
     fn sample_items() -> Vec<ItemMetadata> {
         vec![
-            ItemMetadata::new(ItemId::new("t1"), 0.5, 1.0, "math".into()),
-            ItemMetadata::new(ItemId::new("t2"), 0.7, 1.2, "math".into()),
-            ItemMetadata::new(ItemId::new("t3"), 0.3, 0.8, "code".into()),
-            ItemMetadata::new(ItemId::new("t4"), 0.9, 1.5, "code".into()),
-            ItemMetadata::new(ItemId::new("t5"), 0.6, 1.1, "reasoning".into()),
+            ItemMetadata::new(ItemId::new("t1"), 0.5, 1.0, "math".into()).unwrap(),
+            ItemMetadata::new(ItemId::new("t2"), 0.7, 1.2, "math".into()).unwrap(),
+            ItemMetadata::new(ItemId::new("t3"), 0.3, 0.8, "code".into()).unwrap(),
+            ItemMetadata::new(ItemId::new("t4"), 0.9, 1.5, "code".into()).unwrap(),
+            ItemMetadata::new(ItemId::new("t5"), 0.6, 1.1, "reasoning".into()).unwrap(),
         ]
     }
 
@@ -140,8 +158,8 @@ mod tests {
     #[test]
     fn pool_rejects_duplicates() {
         let items = vec![
-            ItemMetadata::new(ItemId::new("t1"), 0.5, 1.0, "math".into()),
-            ItemMetadata::new(ItemId::new("t1"), 0.7, 1.2, "math".into()),
+            ItemMetadata::new(ItemId::new("t1"), 0.5, 1.0, "math".into()).unwrap(),
+            ItemMetadata::new(ItemId::new("t1"), 0.7, 1.2, "math".into()).unwrap(),
         ];
         let err = ItemPool::new(items).unwrap_err();
         assert!(matches!(err, PoolError::DuplicateId(_)));
@@ -168,5 +186,23 @@ mod tests {
         pool.record_exposure(&id);
         pool.record_exposure(&id);
         assert_eq!(pool.get(&id).unwrap().exposure_count, 2);
+    }
+
+    #[test]
+    fn rejects_zero_discrimination() {
+        let err = ItemMetadata::new(ItemId::new("bad"), 0.5, 0.0, "math".into()).unwrap_err();
+        assert!(matches!(err, ItemError::InvalidDiscrimination(_)));
+    }
+
+    #[test]
+    fn rejects_negative_discrimination() {
+        let err = ItemMetadata::new(ItemId::new("bad"), 0.5, -1.0, "math".into()).unwrap_err();
+        assert!(matches!(err, ItemError::InvalidDiscrimination(_)));
+    }
+
+    #[test]
+    fn rejects_nan_discrimination() {
+        let err = ItemMetadata::new(ItemId::new("bad"), 0.5, f64::NAN, "math".into()).unwrap_err();
+        assert!(matches!(err, ItemError::InvalidDiscrimination(_)));
     }
 }

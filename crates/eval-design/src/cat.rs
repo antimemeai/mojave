@@ -198,7 +198,9 @@ impl CatSession {
         self.current_estimate.standard_error <= self.config.stopping.se_threshold
     }
 
-    fn eligible_items<'a>(&self, pool: &'a ItemPool) -> Vec<&'a ItemMetadata> {
+    fn eligible_items<'a>(&mut self, pool: &'a ItemPool) -> Vec<&'a ItemMetadata> {
+        use rand::Rng as _;
+
         pool.items()
             .iter()
             .filter(|item| {
@@ -210,8 +212,16 @@ impl CatSession {
                 match self.config.exposure_control {
                     ExposureControl::None => true,
                     ExposureControl::MaxExposures(max) => item.exposure_count < max,
-                    ExposureControl::ConditionalProbability { threshold, .. } => {
-                        item.exposure_count < threshold
+                    ExposureControl::ConditionalProbability {
+                        threshold,
+                        accept_rate,
+                    } => {
+                        if item.exposure_count < threshold {
+                            true
+                        } else {
+                            let r: f64 = self.rng.random();
+                            r < accept_rate
+                        }
                     }
                 }
             })
@@ -246,6 +256,8 @@ impl CatSession {
         theta_max: f64,
         theta_grid: usize,
     ) -> ItemId {
+        use rand::seq::SliceRandom as _;
+
         let grid: Vec<f64> = if theta_grid <= 1 {
             vec![(theta_min + theta_max) / 2.0]
         } else {
@@ -261,25 +273,28 @@ impl CatSession {
             .map(|&theta| total_information_at(theta, &self.administered))
             .collect();
 
-        // Find item maximizing minimum info across grid
-        let mut best_idx = 0;
-        let mut best_min = f64::NEG_INFINITY;
-
-        for (idx, item) in eligible.iter().enumerate() {
-            let mut min_info = f64::INFINITY;
-            for (g, &theta) in grid.iter().enumerate() {
-                let new_info = base_info[g] + fisher_information(theta, item);
-                if new_info < min_info {
-                    min_info = new_info;
+        // Score each item by its minimum information gain across the grid
+        let mut scored: Vec<(usize, f64)> = eligible
+            .iter()
+            .enumerate()
+            .map(|(idx, item)| {
+                let mut min_info = f64::INFINITY;
+                for (g, &theta) in grid.iter().enumerate() {
+                    let new_info = base_info[g] + fisher_information(theta, item);
+                    if new_info < min_info {
+                        min_info = new_info;
+                    }
                 }
-            }
-            if min_info > best_min {
-                best_min = min_info;
-                best_idx = idx;
-            }
-        }
+                (idx, min_info)
+            })
+            .collect();
+        scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
-        eligible[best_idx].id.clone()
+        // Top-k randomization for game-theoretic unpredictability
+        let k = 3_usize.min(eligible.len());
+        let mut top_k: Vec<usize> = scored[..k].iter().map(|(idx, _)| *idx).collect();
+        top_k.shuffle(&mut self.rng);
+        eligible[top_k[0]].id.clone()
     }
 }
 
@@ -383,6 +398,7 @@ mod tests {
                     discrimination,
                     "general".into(),
                 )
+                .unwrap()
             })
             .collect();
         ItemPool::new(items).unwrap()
