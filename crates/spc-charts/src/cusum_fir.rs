@@ -43,7 +43,7 @@ impl FirCusumChart {
         Ok(Self { inner })
     }
 
-    pub fn observe(&mut self, x: f64) -> ChartSignal {
+    pub fn observe(&mut self, x: f64) -> Result<ChartSignal, SpcError> {
         self.inner.observe(x)
     }
 

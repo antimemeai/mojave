@@ -16,7 +16,7 @@ fn default_cusum() -> CusumChart {
 fn in_control_stays_low() {
     let mut chart = default_cusum();
     for &x in &[0.1, -0.2, 0.3, -0.1, 0.0] {
-        chart.observe(x);
+        chart.observe(x).unwrap();
     }
     assert!(chart.c_plus() < 1.0, "C⁺ = {}", chart.c_plus());
     assert!(chart.c_minus() < 1.0, "C⁻ = {}", chart.c_minus());
@@ -27,7 +27,7 @@ fn sustained_shift_triggers() {
     let mut chart = default_cusum();
     let mut signaled = false;
     for t in 0..20 {
-        if chart.observe(1.0).is_out_of_control() {
+        if chart.observe(1.0).unwrap().is_out_of_control() {
             signaled = true;
             assert!(t < 20, "should signal before t=20");
             break;
@@ -46,7 +46,7 @@ fn c_plus_c_minus_always_non_negative() {
     let mut chart = default_cusum();
     for _ in 0..1000 {
         let x: f64 = StandardNormal.sample(&mut rng);
-        chart.observe(x);
+        chart.observe(x).unwrap();
         assert!(chart.c_plus() >= 0.0, "C⁺ went negative");
         assert!(chart.c_minus() >= 0.0, "C⁻ went negative");
     }
@@ -56,7 +56,7 @@ fn c_plus_c_minus_always_non_negative() {
 fn reset_restores_initial() {
     let mut chart = default_cusum();
     for &x in &[1.0, 1.5, 2.0, 1.0, 1.5] {
-        chart.observe(x);
+        chart.observe(x).unwrap();
     }
     chart.reset();
     assert_eq!(chart.c_plus(), 0.0);
@@ -69,17 +69,30 @@ fn known_cusum_trace() {
     let mut chart = default_cusum();
     // z = x - 0 / 1 = x. k=0.5.
     // x=0.8: C+ = max(0, 0+0.8-0.5)=0.3, C- = max(0, 0-0.8-0.5)=0
-    let s = chart.observe(0.8);
+    let s = chart.observe(0.8).unwrap();
     assert!(s.is_in_control());
     assert!((chart.c_plus() - 0.3).abs() < 1e-10);
     assert_eq!(chart.c_minus(), 0.0);
 
     // x=0.6: C+ = max(0, 0.3+0.6-0.5)=0.4
-    chart.observe(0.6);
+    chart.observe(0.6).unwrap();
     assert!((chart.c_plus() - 0.4).abs() < 1e-10);
 
     // x=-1.0: C+ = max(0, 0.4-1.0-0.5)=0, C- = max(0, 0+1.0-0.5)=0.5
-    chart.observe(-1.0);
+    chart.observe(-1.0).unwrap();
     assert_eq!(chart.c_plus(), 0.0);
     assert!((chart.c_minus() - 0.5).abs() < 1e-10);
+}
+
+#[test]
+fn cusum_rejects_nan() {
+    let mut chart = default_cusum();
+    assert!(chart.observe(f64::NAN).is_err());
+}
+
+#[test]
+fn cusum_rejects_infinity() {
+    let mut chart = default_cusum();
+    assert!(chart.observe(f64::INFINITY).is_err());
+    assert!(chart.observe(f64::NEG_INFINITY).is_err());
 }

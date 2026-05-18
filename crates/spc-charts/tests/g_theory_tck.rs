@@ -52,5 +52,5 @@ fn control_limits_feeds_into_chart() {
     // Should be usable with any chart.
     let mut chart =
         spc_charts::ShewhartChart::new(spc_charts::ShewhartConfig::default_for(limits)).unwrap();
-    assert!(chart.observe(50.0).is_in_control());
+    assert!(chart.observe(50.0).unwrap().is_in_control());
 }

@@ -59,4 +59,6 @@ pub enum SpcError {
     SingularArlMatrix(f64),
     #[error("window width must be >= 1, got {0}")]
     InvalidWindowWidth(usize),
+    #[error("observation must be finite, got {0}")]
+    NonFiniteInput(f64),
 }

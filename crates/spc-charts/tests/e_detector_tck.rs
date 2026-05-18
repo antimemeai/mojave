@@ -29,7 +29,7 @@ fn detects_shift() {
     let mut det = gaussian_detector(0.05);
     let mut detected = false;
     for _ in 0..200 {
-        if det.observe(1.5).is_out_of_control() {
+        if det.observe(1.5).unwrap().is_out_of_control() {
             detected = true;
             break;
         }
@@ -42,7 +42,7 @@ fn e_process_floor_is_one() {
     let mut det = gaussian_detector(0.05);
     // Feed observations that produce e-values < 1 (near mu_0).
     for _ in 0..100 {
-        det.observe(0.0);
+        det.observe(0.0).unwrap();
         assert!(
             det.e_process() >= 1.0 - 1e-10,
             "M_t = {} < 1",
@@ -67,7 +67,7 @@ fn mc_false_alarm_rate() {
         let mut det = gaussian_detector(alpha);
         for _ in 0..seq_len {
             let x: f64 = StandardNormal.sample(&mut rng);
-            if det.observe(x).is_out_of_control() {
+            if det.observe(x).unwrap().is_out_of_control() {
                 false_alarms += 1;
                 break;
             }
@@ -85,7 +85,7 @@ fn mc_false_alarm_rate() {
 fn reset_clears_state() {
     let mut det = gaussian_detector(0.05);
     for _ in 0..10 {
-        det.observe(2.0);
+        det.observe(2.0).unwrap();
     }
     det.reset();
     assert_eq!(det.e_process(), 1.0);
@@ -103,7 +103,13 @@ fn fixed_window_mode() {
 
     // Feed 10 observations. After 5, the window should be sliding.
     for _ in 0..10 {
-        det.observe(0.0);
+        det.observe(0.0).unwrap();
     }
     assert_eq!(det.n_observations(), 10);
+}
+
+#[test]
+fn e_detector_rejects_nan() {
+    let mut det = gaussian_detector(0.05);
+    assert!(det.observe(f64::NAN).is_err());
 }
