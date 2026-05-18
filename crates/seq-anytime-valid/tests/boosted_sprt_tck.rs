@@ -92,7 +92,7 @@ fn boosted_sprt_feature_runs_end_to_end() {
                 let p1 = 0.7_f64;
                 // All observations are 1.0 (successes)
                 let lr_factors: Vec<f64> = (0..10)
-                    .map(|_| bernoulli_log_lr(1.0, p0, p1).exp())
+                    .map(|_| bernoulli_log_lr(1.0, p0, p1).unwrap().exp())
                     .collect();
 
                 // Conservative (unboosted) process: naive product of LR factors

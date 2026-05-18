@@ -19,8 +19,13 @@ pub fn validate_observations(observations: &[f64]) -> Result<(), SeqError> {
 
 /// Log-likelihood ratio for a single Bernoulli observation.
 /// LLR_i = x_i * ln(p1/p0) + (1 - x_i) * ln((1-p1)/(1-p0))
-pub fn bernoulli_log_lr(x: f64, p0: f64, p1: f64) -> f64 {
-    x * (p1 / p0).ln() + (1.0 - x) * ((1.0 - p1) / (1.0 - p0)).ln()
+///
+/// Returns an error if the observation is not in [0, 1].
+pub fn bernoulli_log_lr(x: f64, p0: f64, p1: f64) -> Result<f64, SeqError> {
+    if !x.is_finite() || !(0.0..=1.0).contains(&x) {
+        return Err(SeqError::InvalidBernoulliObservation(x));
+    }
+    Ok(x * (p1 / p0).ln() + (1.0 - x) * ((1.0 - p1) / (1.0 - p0)).ln())
 }
 
 /// Cumulative log-likelihood ratio for Bernoulli observations.
@@ -39,10 +44,11 @@ pub fn bernoulli_cumulative_log_lr(
     if (p0 - p1).abs() < f64::EPSILON {
         return Err(SeqError::DegenerateHypotheses);
     }
-    Ok(observations
-        .iter()
-        .map(|&x| bernoulli_log_lr(x, p0, p1))
-        .sum())
+    let mut sum = 0.0;
+    for &x in observations {
+        sum += bernoulli_log_lr(x, p0, p1)?;
+    }
+    Ok(sum)
 }
 
 /// Log-likelihood ratio for a single Normal observation with known variance.
@@ -73,18 +79,36 @@ pub fn normal_cumulative_log_lr(
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+
     use super::*;
 
     #[test]
     fn bernoulli_log_lr_success_contributes_positive() {
-        let llr = bernoulli_log_lr(1.0, 0.1, 0.2);
+        let llr = bernoulli_log_lr(1.0, 0.1, 0.2).unwrap();
         assert!(llr > 0.0, "success under higher p1 should be positive");
     }
 
     #[test]
     fn bernoulli_log_lr_failure_contributes_negative() {
-        let llr = bernoulli_log_lr(0.0, 0.1, 0.2);
+        let llr = bernoulli_log_lr(0.0, 0.1, 0.2).unwrap();
         assert!(llr < 0.0, "failure under higher p1 should be negative");
+    }
+
+    #[test]
+    fn bernoulli_log_lr_rejects_out_of_range() {
+        assert!(matches!(
+            bernoulli_log_lr(1.5, 0.3, 0.7),
+            Err(SeqError::InvalidBernoulliObservation(_))
+        ));
+        assert!(matches!(
+            bernoulli_log_lr(-0.1, 0.3, 0.7),
+            Err(SeqError::InvalidBernoulliObservation(_))
+        ));
+        assert!(matches!(
+            bernoulli_log_lr(f64::NAN, 0.3, 0.7),
+            Err(SeqError::InvalidBernoulliObservation(_))
+        ));
     }
 
     #[test]

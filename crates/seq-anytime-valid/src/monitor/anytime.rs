@@ -1,12 +1,17 @@
 use crate::error::SeqError;
-use crate::evidence::{confseq, msprt};
 use crate::types::{EvidenceSnapshot, MsprtConfig};
 
 pub struct AnytimeMonitor {
     theta_0: f64,
     mixing_variance: f64,
     alpha: f64,
-    observations: Vec<f64>,
+    n: usize,
+    /// Running sum of (x_i - theta_0).
+    running_sum: f64,
+    /// Running sum of x_i (for confidence sequence).
+    raw_sum: f64,
+    /// Running sum of (x_i - running_mean)^2 via Welford's algorithm (M2).
+    welford_m2: f64,
 }
 
 impl AnytimeMonitor {
@@ -21,7 +26,10 @@ impl AnytimeMonitor {
             theta_0: config.theta_0,
             mixing_variance: config.mixing_variance,
             alpha,
-            observations: Vec::new(),
+            n: 0,
+            running_sum: 0.0,
+            raw_sum: 0.0,
+            welford_m2: 0.0,
         })
     }
 
@@ -29,16 +37,47 @@ impl AnytimeMonitor {
         if !observation.is_finite() {
             return Err(SeqError::NonFiniteInput(observation));
         }
-        self.observations.push(observation);
 
-        let log_lr =
-            msprt::gaussian_msprt_log_lr(&self.observations, self.theta_0, self.mixing_variance)?;
-        let avp = msprt::always_valid_p(&self.observations, self.theta_0, self.mixing_variance)?;
-        let cs = confseq::normal_mixture_cs(&self.observations, self.alpha)?;
+        // Update running statistics (Welford's online algorithm for variance)
+        let old_mean = if self.n > 0 {
+            self.raw_sum / self.n as f64
+        } else {
+            0.0
+        };
+        self.n += 1;
+        self.running_sum += observation - self.theta_0;
+        self.raw_sum += observation;
+        let new_mean = self.raw_sum / self.n as f64;
+        self.welford_m2 += (observation - old_mean) * (observation - new_mean);
+
+        let n_f = self.n as f64;
+        let tau_sq = self.mixing_variance;
+
+        // mSPRT log-LR: -0.5*ln(1 + n*tau^2) + n^2*xbar^2*tau^2 / (2*(1 + n*tau^2))
+        // where xbar = running_sum / n (centered at theta_0)
+        let x_bar = self.running_sum / n_f;
+        let denom = 1.0 + n_f * tau_sq;
+        let log_lr = -0.5 * denom.ln() + n_f.powi(2) * x_bar.powi(2) * tau_sq / (2.0 * denom);
+
+        // Always-valid p-value: min(1, 1/Lambda_n)
+        let lr = log_lr.exp();
+        let avp = (1.0 / lr).min(1.0);
+
+        // Confidence sequence: xbar ± sigma * sqrt(2*(1+1/n)*ln(sqrt(n+1)/alpha)/n)
+        let variance = if self.n > 1 {
+            self.welford_m2 / n_f
+        } else {
+            0.0
+        };
+        let sigma = variance.sqrt().max(1e-10);
+        let width =
+            sigma * (2.0 * (1.0 + 1.0 / n_f) * ((n_f + 1.0).sqrt() / self.alpha).ln() / n_f).sqrt();
+        let raw_mean = self.raw_sum / n_f;
+        let cs = (raw_mean - width, raw_mean + width);
 
         Ok(EvidenceSnapshot {
             log_likelihood_ratio: log_lr,
-            n_observations: self.observations.len(),
+            n_observations: self.n,
             always_valid_p: Some(avp),
             confidence_interval: Some(cs),
             e_value: Some(log_lr.exp()),
