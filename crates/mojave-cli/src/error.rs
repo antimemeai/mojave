@@ -55,6 +55,12 @@ impl From<std::io::Error> for CliError {
     }
 }
 
+impl From<ConfigError> for CliError {
+    fn from(e: ConfigError) -> Self {
+        CliError::Config(e)
+    }
+}
+
 impl CliError {
     pub fn kind(&self) -> &'static str {
         match self {
