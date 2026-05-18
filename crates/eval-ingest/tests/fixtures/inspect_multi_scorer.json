@@ -1,0 +1,18 @@
+{
+  "version": "2",
+  "eval": {
+    "run_id": "run_multi_001",
+    "task_id": "multi-scored-task",
+    "model": "anthropic/claude-sonnet",
+    "config": {},
+    "metadata": {}
+  },
+  "metadata": {},
+  "samples": [
+    { "id": "m1", "uuid": "uuid_m1", "epoch": 1, "started_at": "2025-06-01T12:00:00+00:00", "scores": { "exact_match": { "value": "C" }, "includes": { "value": "C" } }, "metadata": {} },
+    { "id": "m2", "uuid": "uuid_m2", "epoch": 1, "started_at": "2025-06-01T12:00:01+00:00", "scores": { "exact_match": { "value": "I" }, "includes": { "value": "C" } }, "metadata": {} },
+    { "id": "m3", "uuid": "uuid_m3", "epoch": 1, "started_at": "2025-06-01T12:00:02+00:00", "scores": { "exact_match": { "value": "C" }, "includes": { "value": "I" } }, "metadata": {} },
+    { "id": "m4", "uuid": "uuid_m4", "epoch": 1, "started_at": "2025-06-01T12:00:03+00:00", "scores": { "exact_match": { "value": "I" }, "includes": { "value": "I" } }, "metadata": {} },
+    { "id": "m5", "uuid": "uuid_m5", "epoch": 1, "started_at": "2025-06-01T12:00:04+00:00", "scores": { "exact_match": { "value": "C" }, "includes": { "value": "C" } }, "metadata": {} }
+  ]
+}

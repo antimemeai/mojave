@@ -1,0 +1,24 @@
+{
+  "version": "2",
+  "eval": {
+    "run_id": "run_abc123",
+    "task_id": "security-guide",
+    "model": "openai/gpt-4o",
+    "config": { "temperature": 0.0, "seed": 42 },
+    "revision": { "commit": "deadbeef" },
+    "metadata": {}
+  },
+  "metadata": {"inspect_version": "0.3.80"},
+  "samples": [
+    { "id": "s1",  "uuid": "uuid_s1",  "epoch": 1, "started_at": "2025-05-12T20:28:26+00:00", "scores": { "exact_match": { "value": "C" } }, "metadata": {} },
+    { "id": "s2",  "uuid": "uuid_s2",  "epoch": 1, "started_at": "2025-05-12T20:28:27+00:00", "scores": { "exact_match": { "value": "I" } }, "metadata": {} },
+    { "id": "s3",  "uuid": "uuid_s3",  "epoch": 1, "started_at": "2025-05-12T20:28:28+00:00", "scores": { "exact_match": { "value": "C" } }, "metadata": {} },
+    { "id": "s4",  "uuid": "uuid_s4",  "epoch": 1, "started_at": "2025-05-12T20:28:29+00:00", "scores": { "exact_match": { "value": "C" } }, "metadata": {} },
+    { "id": "s5",  "uuid": "uuid_s5",  "epoch": 1, "started_at": "2025-05-12T20:28:30+00:00", "scores": { "exact_match": { "value": "I" } }, "metadata": {} },
+    { "id": "s6",  "uuid": "uuid_s6",  "epoch": 1, "started_at": "2025-05-12T20:28:31+00:00", "scores": { "exact_match": { "value": "C" } }, "metadata": {} },
+    { "id": "s7",  "uuid": "uuid_s7",  "epoch": 1, "started_at": "2025-05-12T20:28:32+00:00", "scores": { "exact_match": { "value": "I" } }, "metadata": {} },
+    { "id": "s8",  "uuid": "uuid_s8",  "epoch": 1, "started_at": "2025-05-12T20:28:33+00:00", "scores": { "exact_match": { "value": "C" } }, "metadata": {} },
+    { "id": "s9",  "uuid": "uuid_s9",  "epoch": 1, "started_at": "2025-05-12T20:28:34+00:00", "scores": { "exact_match": { "value": "C" } }, "metadata": {} },
+    { "id": "s10", "uuid": "uuid_s10", "epoch": 1, "started_at": "2025-05-12T20:28:35+00:00", "scores": { "exact_match": { "value": "I" } }, "metadata": {} }
+  ]
+}

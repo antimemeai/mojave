@@ -1,0 +1,23 @@
+{
+  "version": "2",
+  "eval": {
+    "run_id": "run_malformed_001",
+    "task_id": "malformed-task",
+    "model": "openai/gpt-4o",
+    "config": {},
+    "metadata": {}
+  },
+  "metadata": {},
+  "samples": [
+    { "id": "x1",  "uuid": "uuid_x1",  "epoch": 1, "started_at": "2025-06-01T16:00:00+00:00", "scores": { "s": { "value": "C" } }, "metadata": {} },
+    { "id": "x2",  "uuid": "uuid_x2",  "epoch": 1, "started_at": "2025-06-01T16:00:01+00:00", "scores": { "s": { "value": "I" } }, "metadata": {} },
+    { "id": "x3",  "uuid": "uuid_x3",  "epoch": 1, "started_at": "2025-06-01T16:00:02+00:00", "scores": null, "metadata": {} },
+    { "id": "x4",  "uuid": "uuid_x4",  "epoch": 1, "started_at": "2025-06-01T16:00:03+00:00", "scores": { "s": { "value": "C" } }, "metadata": {} },
+    { "id": "x5",  "uuid": "uuid_x5",  "epoch": 1, "started_at": "2025-06-01T16:00:04+00:00", "scores": { "s": { "value": "C" } }, "metadata": {} },
+    { "id": "x6",  "uuid": "uuid_x6",  "epoch": 1, "started_at": "2025-06-01T16:00:05+00:00", "scores": { "s": { "value": "I" } }, "metadata": {} },
+    { "id": "x7",  "uuid": "uuid_x7",  "epoch": 1, "started_at": "2025-06-01T16:00:06+00:00", "scores": { "s": { "value": [1, 2, 3] } }, "metadata": {} },
+    { "id": "x8",  "uuid": "uuid_x8",  "epoch": 1, "started_at": "2025-06-01T16:00:07+00:00", "scores": { "s": { "value": "C" } }, "metadata": {} },
+    { "id": "x9",  "uuid": "uuid_x9",  "epoch": 1, "started_at": "2025-06-01T16:00:08+00:00", "scores": { "s": { "value": "I" } }, "metadata": {} },
+    { "id": "x10", "uuid": "uuid_x10", "epoch": 1, "started_at": "2025-06-01T16:00:09+00:00", "scores": { "s": { "value": "C" } }, "metadata": {} }
+  ]
+}

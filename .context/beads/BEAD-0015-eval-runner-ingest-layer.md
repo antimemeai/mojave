@@ -1,9 +1,10 @@
 ---
 id: BEAD-0015
 title: Eval runner ingest layer (runner-agnostic + Inspect adapter)
-status: open
+status: closed
 priority: high
 created: 2026-05-11
+closed: 2026-05-14
 ---
 
 ## Description
@@ -34,3 +35,22 @@ Inspect is a common runner in the safety eval community (UK AISI, METR, Apollo R
 - Runner-agnostic trait defined and documented
 - Inspect adapter passes integration tests against real Inspect log files
 - At least one example of a "custom runner" adapter (even if toy)
+
+## Completion notes
+
+Implemented as `eval-ingest` crate in `crates/eval-ingest/`.
+
+### Components
+- **IngestAdapter trait** — runner-agnostic interface producing `Vec<TrialRecord>`
+- **InspectAdapter** — Inspect AI EvalLog v2 JSON adapter (binary, score, graded, multi-criterion outcomes; multi-scorer; epoch support; judge_config extraction for model-graded scorers)
+- **JsonlAdapter** — generic JSONL adapter with configurable `FieldMapping` and `OutcomeMapping` (binary, score, graded, multi-criterion, auto-detect)
+- **Validation layer** — `validate_record()` checks task_id, agent_id, timestamp bounds, outcome finiteness
+- **Deterministic ID generation** — SHA-256 → ULID for stable trial_id/run_id across runs
+- **SourceMeta provenance** — runner name/version, log format version, content SHA-256 hash
+
+### Test coverage
+- 24 unit tests (id, inspect, validate modules)
+- 7 Inspect TCK integration tests (binary, model-graded, multi-scorer, epochs, malformed, provenance, determinism)
+- 5 JSONL TCK integration tests (auto-detect, custom mapping, defaults, mixed lines, determinism)
+- 36 total tests, all passing
+- Clippy zero warnings, rustfmt clean

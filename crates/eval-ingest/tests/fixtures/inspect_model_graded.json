@@ -1,0 +1,58 @@
+{
+  "version": "2",
+  "eval": {
+    "run_id": "run_graded_001",
+    "task_id": "factuality-check",
+    "model": "openai/gpt-4o",
+    "config": { "temperature": 0.5 },
+    "metadata": {}
+  },
+  "metadata": {},
+  "samples": [
+    {
+      "id": 1, "uuid": "uuid_g1", "epoch": 1, "started_at": "2025-06-01T10:00:00+00:00",
+      "messages": [
+        { "role": "user", "content": "Is the following statement factually correct?" },
+        { "role": "assistant", "content": "Yes, the statement is correct." }
+      ],
+      "scores": { "model_graded_fact": { "value": "C", "metadata": { "grading": { "model": "gpt-4o-mini-2024-07-18", "temperature": 0.5 } } } },
+      "metadata": {}
+    },
+    {
+      "id": 2, "uuid": "uuid_g2", "epoch": 1, "started_at": "2025-06-01T10:00:01+00:00",
+      "messages": [
+        { "role": "user", "content": "Is the following statement factually correct?" },
+        { "role": "assistant", "content": "No." }
+      ],
+      "scores": { "model_graded_fact": { "value": "I", "metadata": { "grading": { "model": "gpt-4o-mini-2024-07-18", "temperature": 0.5 } } } },
+      "metadata": {}
+    },
+    {
+      "id": 3, "uuid": "uuid_g3", "epoch": 1, "started_at": "2025-06-01T10:00:02+00:00",
+      "messages": [
+        { "role": "user", "content": "Is the following statement factually correct?" },
+        { "role": "assistant", "content": "Yes." }
+      ],
+      "scores": { "model_graded_fact": { "value": "C", "metadata": { "grading": { "model": "gpt-4o-mini-2024-07-18", "temperature": 0.5 } } } },
+      "metadata": {}
+    },
+    {
+      "id": 4, "uuid": "uuid_g4", "epoch": 1, "started_at": "2025-06-01T10:00:03+00:00",
+      "messages": [
+        { "role": "user", "content": "Is the following statement factually correct?" },
+        { "role": "assistant", "content": "Yes." }
+      ],
+      "scores": { "model_graded_fact": { "value": "C", "metadata": { "grading": { "model": "gpt-4o-mini-2024-07-18", "temperature": 0.5 } } } },
+      "metadata": {}
+    },
+    {
+      "id": 5, "uuid": "uuid_g5", "epoch": 1, "started_at": "2025-06-01T10:00:04+00:00",
+      "messages": [
+        { "role": "user", "content": "Is the following statement factually correct?" },
+        { "role": "assistant", "content": "No." }
+      ],
+      "scores": { "model_graded_fact": { "value": "I", "metadata": { "grading": { "model": "gpt-4o-mini-2024-07-18", "temperature": 0.5 } } } },
+      "metadata": {}
+    }
+  ]
+}

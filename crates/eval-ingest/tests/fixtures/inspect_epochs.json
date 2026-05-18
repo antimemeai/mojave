@@ -1,0 +1,28 @@
+{
+  "version": "2",
+  "eval": {
+    "run_id": "run_epoch_001",
+    "task_id": "epoch-task",
+    "model": "openai/gpt-4o",
+    "config": { "seed": 123 },
+    "metadata": {}
+  },
+  "metadata": {},
+  "samples": [
+    { "id": "e1", "uuid": "uuid_e1_ep1", "epoch": 1, "started_at": "2025-06-01T14:00:00+00:00", "scores": { "exact_match": { "value": "C" } }, "metadata": {} },
+    { "id": "e1", "uuid": "uuid_e1_ep2", "epoch": 2, "started_at": "2025-06-01T14:00:01+00:00", "scores": { "exact_match": { "value": "I" } }, "metadata": {} },
+    { "id": "e1", "uuid": "uuid_e1_ep3", "epoch": 3, "started_at": "2025-06-01T14:00:02+00:00", "scores": { "exact_match": { "value": "C" } }, "metadata": {} },
+    { "id": "e2", "uuid": "uuid_e2_ep1", "epoch": 1, "started_at": "2025-06-01T14:00:03+00:00", "scores": { "exact_match": { "value": "C" } }, "metadata": {} },
+    { "id": "e2", "uuid": "uuid_e2_ep2", "epoch": 2, "started_at": "2025-06-01T14:00:04+00:00", "scores": { "exact_match": { "value": "C" } }, "metadata": {} },
+    { "id": "e2", "uuid": "uuid_e2_ep3", "epoch": 3, "started_at": "2025-06-01T14:00:05+00:00", "scores": { "exact_match": { "value": "I" } }, "metadata": {} },
+    { "id": "e3", "uuid": "uuid_e3_ep1", "epoch": 1, "started_at": "2025-06-01T14:00:06+00:00", "scores": { "exact_match": { "value": "C" } }, "metadata": {} },
+    { "id": "e3", "uuid": "uuid_e3_ep2", "epoch": 2, "started_at": "2025-06-01T14:00:07+00:00", "scores": { "exact_match": { "value": "C" } }, "metadata": {} },
+    { "id": "e3", "uuid": "uuid_e3_ep3", "epoch": 3, "started_at": "2025-06-01T14:00:08+00:00", "scores": { "exact_match": { "value": "C" } }, "metadata": {} },
+    { "id": "e4", "uuid": "uuid_e4_ep1", "epoch": 1, "started_at": "2025-06-01T14:00:09+00:00", "scores": { "exact_match": { "value": "I" } }, "metadata": {} },
+    { "id": "e4", "uuid": "uuid_e4_ep2", "epoch": 2, "started_at": "2025-06-01T14:00:10+00:00", "scores": { "exact_match": { "value": "C" } }, "metadata": {} },
+    { "id": "e4", "uuid": "uuid_e4_ep3", "epoch": 3, "started_at": "2025-06-01T14:00:11+00:00", "scores": { "exact_match": { "value": "I" } }, "metadata": {} },
+    { "id": "e5", "uuid": "uuid_e5_ep1", "epoch": 1, "started_at": "2025-06-01T14:00:12+00:00", "scores": { "exact_match": { "value": "C" } }, "metadata": {} },
+    { "id": "e5", "uuid": "uuid_e5_ep2", "epoch": 2, "started_at": "2025-06-01T14:00:13+00:00", "scores": { "exact_match": { "value": "I" } }, "metadata": {} },
+    { "id": "e5", "uuid": "uuid_e5_ep3", "epoch": 3, "started_at": "2025-06-01T14:00:14+00:00", "scores": { "exact_match": { "value": "C" } }, "metadata": {} }
+  ]
+}

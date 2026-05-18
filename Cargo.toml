@@ -2,6 +2,8 @@
 resolver = "2"
 members = [
     "crates/eval-core",
+    "crates/eval-ingest",
+    "crates/eval-orchestrator",
     "crates/irr",
     "crates/metric-tck-harness",
     "crates/salib-cli",
