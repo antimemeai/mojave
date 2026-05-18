@@ -6,6 +6,7 @@ members = [
     "crates/eval-orchestrator",
     "crates/irr",
     "crates/metric-tck-harness",
+    "crates/mojave-cli",
     "crates/seq-anytime-valid",
     "crates/spc-charts",
 ]
