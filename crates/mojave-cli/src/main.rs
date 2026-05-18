@@ -177,9 +177,14 @@ fn main() {
                 }
             }
         }
-        Commands::Sensitivity { .. } => {
-            eprintln!("mojave sensitivity: not yet implemented");
-            std::process::exit(2);
+        Commands::Sensitivity { args } => {
+            match mojave_cli::commands::sensitivity::run_sensitivity(&args) {
+                Ok(()) => Ok(()),
+                Err(e) => {
+                    write_error(&e);
+                    std::process::exit(1);
+                }
+            }
         }
         Commands::Completions { shell } => {
             clap_complete::generate(shell, &mut Cli::command(), "mojave", &mut std::io::stdout());
