@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/audit-chain",
     "crates/audit-sign",
+    "crates/change-attribution",
     "crates/eval-core",
     "crates/eval-ingest",
     "crates/eval-orchestrator",
