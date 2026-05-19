@@ -89,3 +89,42 @@ def factor_response_file(tmp_path: Path) -> tuple[Path, list[list[float]]]:
     path.write_text(header + "\n" + "\n".join(rows))
 
     return path, true_loadings
+
+
+@pytest.fixture()
+def cfa_data_file(tmp_path: Path) -> tuple[Path, str]:
+    """Generate continuous data from a known 3-factor model.
+
+    Returns (path_to_csv, lavaan_model_string).
+    9 items (3 per factor), 500 subjects.
+    """
+    import numpy as np
+    import pandas as pd
+
+    rng = np.random.default_rng(42)
+    n_subjects = 500
+
+    loadings = np.array(
+        [
+            [0.8, 0.0, 0.0],
+            [0.7, 0.0, 0.0],
+            [0.6, 0.0, 0.0],
+            [0.0, 0.8, 0.0],
+            [0.0, 0.7, 0.0],
+            [0.0, 0.6, 0.0],
+            [0.0, 0.0, 0.8],
+            [0.0, 0.0, 0.7],
+            [0.0, 0.0, 0.6],
+        ]
+    )
+    factors = rng.standard_normal((n_subjects, 3))
+    noise = rng.standard_normal((n_subjects, 9)) * 0.4
+    observed = factors @ loadings.T + noise
+
+    columns = [f"x{i + 1}" for i in range(9)]
+    df = pd.DataFrame(observed, columns=columns)
+    path = tmp_path / "cfa_data.csv"
+    df.to_csv(path, index=False)
+
+    model_spec = "f1 =~ x1 + x2 + x3\nf2 =~ x4 + x5 + x6\nf3 =~ x7 + x8 + x9"
+    return path, model_spec
