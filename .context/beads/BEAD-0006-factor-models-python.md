@@ -1,7 +1,8 @@
 ---
 id: BEAD-0006
 title: Factor models for latent task structure (Python layer)
-status: open
+status: closed
+closed: 2026-05-19
 priority: nice-to-have
 created: 2026-05-11
 ---

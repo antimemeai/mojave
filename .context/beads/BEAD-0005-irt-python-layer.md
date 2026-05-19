@@ -1,7 +1,8 @@
 ---
 id: BEAD-0005
 title: IRT integration via torch_measure (Python layer)
-status: open
+status: closed
+closed: 2026-05-19
 priority: nice-to-have
 created: 2026-05-11
 ---
