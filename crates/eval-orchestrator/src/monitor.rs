@@ -313,7 +313,10 @@ impl Monitor {
 
             let mut last_signal = spc_charts::types::ChartSignal::InControl;
             for &obs in &state.chart_observations {
-                last_signal = chart.observe(obs);
+                match chart.observe(obs) {
+                    Ok(s) => last_signal = s,
+                    Err(_) => continue,
+                }
             }
 
             if last_signal.is_out_of_control() {

@@ -8,7 +8,7 @@ use eval_core::TrialRecord;
 use spc_charts::types::{ChartSignal, ControlLimits};
 use spc_charts::{
     CombinedChart, CombinedConfig, CusumChart, CusumConfig, EwmaChart, EwmaConfig, ShewhartChart,
-    ShewhartConfig,
+    ShewhartConfig, SpcError,
 };
 use ulid::Ulid;
 
@@ -278,7 +278,7 @@ fn observe_and_collect(
     phase2_windows: &[WindowStat],
     limits: &ControlLimits,
     l_sigma: f64,
-    mut observe_fn: impl FnMut(f64) -> ChartSignal,
+    mut observe_fn: impl FnMut(f64) -> Result<ChartSignal, SpcError>,
 ) -> (Vec<Decision>, Vec<ChartSignal>) {
     let mut decisions = Vec::new();
     let mut signals = Vec::new();
@@ -287,7 +287,10 @@ fn observe_and_collect(
     let cl_upper = limits.mu_0 + l_sigma * limits.sigma;
 
     for window in phase2_windows {
-        let signal = observe_fn(window.mean);
+        let signal = match observe_fn(window.mean) {
+            Ok(s) => s,
+            Err(_) => continue,
+        };
         if signal.is_out_of_control() {
             decisions.push(Decision::Regression {
                 series: series.clone(),
