@@ -3,15 +3,21 @@
 ## Repo structure
 
 ```
-.context/          # LLM working memory (beads, decisions, lit-reviews, session-notes)
 crates/            # Rust crate workspace
 tck/               # Behavioral specs (Gherkin .feature files)
 docs/
   adr/             # Architectural Decision Records (formal, load-bearing)
   specs/           # Design specs from brainstorming
   reference/       # Reference material (validation strategy, etc.)
-scripts/           # Operational tooling (hooks, CI helpers)
-quarantine/        # Old artifacts — gitignored, shopped from as needed
+scripts/           # Operational tooling (hooks, CI helpers, measurement pipeline)
+templates/         # Parametric LaTeX report templates (run cards)
+```
+
+Local-only (gitignored):
+```
+.context/          # LLM working memory (beads, decisions, lit-reviews)
+quarantine/        # Old artifacts, shopped from as needed
+data/              # Eval logs, analysis results, run card outputs
 ```
 
 `../evals_papers/` — PDF library (outside repo, never in git)
@@ -43,7 +49,7 @@ Extreme rigor baseline. No shortcuts.
 ### Infrastructure
 - Pre-commit hooks: Rust must pass clippy (zero warnings) + rustfmt
 - ADRs for load-bearing architectural decisions
-- Beads for ALL issue tracking (in .context/beads/)
+- Beads for ALL issue tracking (local .context/beads/, gitignored)
 - Git commits: frequent, atomic, descriptive
 
 ## Language split
