@@ -4,6 +4,7 @@ pub mod error;
 pub mod evidence;
 pub mod monitor;
 pub mod practical;
+pub mod retrospective;
 pub mod types;
 
 pub use error::SeqError;
@@ -18,3 +19,4 @@ pub use monitor::bernoulli::BernoulliMonitor;
 pub use monitor::group_seq::{compute_boundaries, GroupSeqMonitor};
 pub use monitor::sprt::{sprt_decide, SprtMonitor};
 pub use practical::practical_significance_p;
+pub use retrospective::{permutation_stopping_times, PermutationSummary, StoppingTimeResult};
