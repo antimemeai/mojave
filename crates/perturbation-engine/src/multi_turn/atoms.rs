@@ -41,10 +41,19 @@ pub enum MultiTurnPlan {
     Original {
         history: Vec<ConversationMessage>,
     },
+    /// Drops the first `n` turns from the conversation history.
+    ///
+    /// If the system prompt is at index 0, `n >= 1` will remove it. This is
+    /// intentional for perturbation testing — it measures model sensitivity to
+    /// missing early context.
     TruncateEarly {
         history: Vec<ConversationMessage>,
         n: usize,
     },
+    /// Randomly reorders all messages in the conversation history.
+    ///
+    /// Requires `history.len() >= 2` so that at least one non-identity
+    /// permutation exists.
     Reorder {
         history: Vec<ConversationMessage>,
     },
@@ -62,6 +71,8 @@ pub enum MultiTurnValidationError {
     EmptyHistory,
     #[error("truncate-early requires n > 0 and n < history.len()")]
     InvalidTruncateCount,
+    #[error("reorder requires history.len() >= 2")]
+    ReorderRequiresMultipleMessages,
     #[error("inject position must be <= history.len()")]
     InvalidInjectPosition,
     #[error("inject turn requires non-empty role and content")]
@@ -103,7 +114,14 @@ impl MultiTurnPlan {
             return Err(MultiTurnValidationError::InvalidMessage);
         }
         match self {
-            Self::Original { .. } | Self::Reorder { .. } => Ok(()),
+            Self::Original { .. } => Ok(()),
+            Self::Reorder { history } => {
+                if history.len() < 2 {
+                    Err(MultiTurnValidationError::ReorderRequiresMultipleMessages)
+                } else {
+                    Ok(())
+                }
+            }
             Self::TruncateEarly { n, history } => {
                 if *n == 0 || *n >= history.len() {
                     Err(MultiTurnValidationError::InvalidTruncateCount)
@@ -232,6 +250,37 @@ mod tests {
     fn signed_confound_is_always_true() {
         let plan = MultiTurnPlan::Original { history: history() };
         assert!(plan.signed_confound());
+    }
+
+    #[test]
+    fn reorder_validation_rejects_single_message() {
+        let plan = MultiTurnPlan::Reorder {
+            history: vec![ConversationMessage {
+                role: "user".into(),
+                content: "hello".into(),
+            }],
+        };
+        assert_eq!(
+            plan.validate().unwrap_err(),
+            MultiTurnValidationError::ReorderRequiresMultipleMessages
+        );
+    }
+
+    #[test]
+    fn reorder_validation_accepts_two_messages() {
+        let plan = MultiTurnPlan::Reorder {
+            history: vec![
+                ConversationMessage {
+                    role: "user".into(),
+                    content: "hi".into(),
+                },
+                ConversationMessage {
+                    role: "assistant".into(),
+                    content: "hello".into(),
+                },
+            ],
+        };
+        assert!(plan.validate().is_ok());
     }
 
     #[test]

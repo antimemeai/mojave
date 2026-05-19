@@ -102,8 +102,10 @@ impl<E: EValueSource> EDetector<E> {
         })
     }
 
-    pub fn observe(&mut self, x: f64) -> ChartSignal {
-        debug_assert!(x.is_finite());
+    pub fn observe(&mut self, x: f64) -> Result<ChartSignal, SpcError> {
+        if !x.is_finite() {
+            return Err(SpcError::NonFiniteInput(x));
+        }
         self.n += 1;
         let e = self.source.e_value(x);
 
@@ -125,12 +127,12 @@ impl<E: EValueSource> EDetector<E> {
         }
 
         if self.m >= self.threshold {
-            ChartSignal::OutOfControl {
+            Ok(ChartSignal::OutOfControl {
                 statistic: self.m,
                 observation_index: self.n - 1,
-            }
+            })
         } else {
-            ChartSignal::InControl
+            Ok(ChartSignal::InControl)
         }
     }
 

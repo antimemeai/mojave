@@ -46,28 +46,30 @@ impl CombinedChart {
         })
     }
 
-    pub fn observe(&mut self, x: f64) -> ChartSignal {
-        debug_assert!(x.is_finite());
+    pub fn observe(&mut self, x: f64) -> Result<ChartSignal, SpcError> {
+        if !x.is_finite() {
+            return Err(SpcError::NonFiniteInput(x));
+        }
         self.n += 1;
         let z = (x - self.mu_0) / self.sigma;
 
         // Shewhart check first (instantaneous large shift).
         if z.abs() > self.shewhart_k {
             // Still update CUSUM state for consistency.
-            self.cusum.observe(x);
-            return ChartSignal::OutOfControl {
+            self.cusum.observe(x)?;
+            return Ok(ChartSignal::OutOfControl {
                 statistic: z,
                 observation_index: self.n - 1,
-            };
+            });
         }
 
         // CUSUM check (sustained small shift).
-        let cusum_signal = self.cusum.observe(x);
+        let cusum_signal = self.cusum.observe(x)?;
         if cusum_signal.is_out_of_control() {
-            return cusum_signal;
+            return Ok(cusum_signal);
         }
 
-        ChartSignal::InControl
+        Ok(ChartSignal::InControl)
     }
 
     pub fn reset(&mut self) {

@@ -235,9 +235,10 @@ tell me what matters" — the control plane handles everything else.
 
 ### Python SDK (`mojave`)
 
-The eval ecosystem is Python. The SDK wraps the Rust engine via
-PyO3 (not subprocess). Primary audience: eval engineers integrating
-mojave into existing pipelines.
+The eval ecosystem is Python. ~~The SDK wraps the Rust engine via
+PyO3 (not subprocess).~~ **2026-05-18: Reverted to subprocess + JSON.
+See reaffirmation in decisions/2026-05-11-language-and-boundary-architecture.md.**
+Primary audience: eval engineers integrating mojave into existing pipelines.
 
 ```python
 import mojave

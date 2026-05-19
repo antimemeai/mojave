@@ -65,25 +65,27 @@ impl CusumChart {
         })
     }
 
-    pub fn observe(&mut self, x: f64) -> ChartSignal {
-        debug_assert!(x.is_finite());
+    pub fn observe(&mut self, x: f64) -> Result<ChartSignal, SpcError> {
+        if !x.is_finite() {
+            return Err(SpcError::NonFiniteInput(x));
+        }
         let z = (x - self.mu_0) / self.sigma;
         self.c_plus = f64::max(0.0, self.c_plus + z - self.k);
         self.c_minus = f64::max(0.0, self.c_minus - z - self.k);
         self.n += 1;
 
         if self.c_plus > self.h {
-            ChartSignal::OutOfControl {
+            Ok(ChartSignal::OutOfControl {
                 statistic: self.c_plus,
                 observation_index: self.n - 1,
-            }
+            })
         } else if self.c_minus > self.h {
-            ChartSignal::OutOfControl {
+            Ok(ChartSignal::OutOfControl {
                 statistic: self.c_minus,
                 observation_index: self.n - 1,
-            }
+            })
         } else {
-            ChartSignal::InControl
+            Ok(ChartSignal::InControl)
         }
     }
 

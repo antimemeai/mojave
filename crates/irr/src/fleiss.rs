@@ -77,6 +77,20 @@ pub fn kappa(matrix: &RatingMatrix) -> Result<IrrResult, FleissError> {
 
     let p_e: f64 = p_j.iter().map(|p| p * p).sum();
 
+    // Perfect observed agreement: semantically kappa = 1.0 regardless of p_e.
+    // This handles the 0/0 case when p_e is also 1.0.
+    if (1.0 - p_bar).abs() < 1e-15 {
+        return Ok(IrrResult {
+            statistic_name: "fleiss_kappa".to_string(),
+            value: 1.0,
+            ci_lower: None,
+            ci_upper: None,
+            n_items: n,
+            n_raters: k,
+            metric_level: Some(MetricLevel::Nominal),
+        });
+    }
+
     if (1.0 - p_e).abs() < 1e-15 {
         return Err(FleissError::DegenerateData);
     }

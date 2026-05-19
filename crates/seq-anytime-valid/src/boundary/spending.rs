@@ -41,8 +41,10 @@ pub fn spending_boundary(
     } else {
         0.0
     };
-    let incremental = cumulative_k - cumulative_prev;
-    // Convert incremental alpha to z-boundary (two-sided)
+    let incremental = (cumulative_k - cumulative_prev).clamp(f64::EPSILON, alpha);
+    // Convert incremental alpha to z-boundary (two-sided).
+    // If incremental is effectively zero (clamped to EPSILON), the boundary will be
+    // very large but finite, preventing infinity from floating-point rounding.
     Ok(normal_quantile(1.0 - incremental / 2.0))
 }
 

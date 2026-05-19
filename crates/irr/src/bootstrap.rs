@@ -13,6 +13,8 @@ pub enum BootstrapError {
     InvalidResamples,
     #[error("statistic computation failed on resample: {0}")]
     StatisticFailed(String),
+    #[error("insufficient valid resamples: {succeeded} of {requested} succeeded (<50%), CI estimate unreliable")]
+    InsufficientResamples { succeeded: usize, requested: usize },
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -68,6 +70,14 @@ where
         return Err(BootstrapError::StatisticFailed(
             "all resamples failed".to_string(),
         ));
+    }
+
+    // If fewer than 50% of requested resamples succeeded, the CI is unreliable.
+    if boot_stats.len() * 2 < n_resamples {
+        return Err(BootstrapError::InsufficientResamples {
+            succeeded: boot_stats.len(),
+            requested: n_resamples,
+        });
     }
 
     boot_stats.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));

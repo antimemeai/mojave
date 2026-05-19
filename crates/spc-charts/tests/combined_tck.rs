@@ -16,7 +16,7 @@ fn default_combined() -> CombinedChart {
 fn large_spike_triggers_shewhart_arm() {
     let mut chart = default_combined();
     // 4.0 > 3.5σ Shewhart limit.
-    let signal = chart.observe(4.0);
+    let signal = chart.observe(4.0).unwrap();
     assert!(signal.is_out_of_control());
 }
 
@@ -26,7 +26,7 @@ fn sustained_shift_triggers_cusum_arm() {
     // 1.0σ shift is below 3.5σ Shewhart, but CUSUM accumulates.
     let mut detected = false;
     for _ in 0..30 {
-        if chart.observe(1.0).is_out_of_control() {
+        if chart.observe(1.0).unwrap().is_out_of_control() {
             detected = true;
             break;
         }
@@ -38,7 +38,7 @@ fn sustained_shift_triggers_cusum_arm() {
 fn in_control_no_signal() {
     let mut chart = default_combined();
     for &x in &[0.1, -0.2, 0.3, -0.1, 0.0, 0.5, -0.5] {
-        assert!(chart.observe(x).is_in_control());
+        assert!(chart.observe(x).unwrap().is_in_control());
     }
 }
 
@@ -60,7 +60,7 @@ fn combined_detects_faster_than_either_alone() {
     .unwrap();
     let mut shew_rl = sequence.len();
     for (t, &x) in sequence.iter().enumerate() {
-        if shew.observe(x).is_out_of_control() {
+        if shew.observe(x).unwrap().is_out_of_control() {
             shew_rl = t + 1;
             break;
         }
@@ -70,7 +70,7 @@ fn combined_detects_faster_than_either_alone() {
     let mut cusum = CusumChart::new(CusumConfig::default_for(limits.clone())).unwrap();
     let mut cusum_rl = sequence.len();
     for (t, &x) in sequence.iter().enumerate() {
-        if cusum.observe(x).is_out_of_control() {
+        if cusum.observe(x).unwrap().is_out_of_control() {
             cusum_rl = t + 1;
             break;
         }
@@ -84,7 +84,7 @@ fn combined_detects_faster_than_either_alone() {
     .unwrap();
     let mut comb_rl = sequence.len();
     for (t, &x) in sequence.iter().enumerate() {
-        if comb.observe(x).is_out_of_control() {
+        if comb.observe(x).unwrap().is_out_of_control() {
             comb_rl = t + 1;
             break;
         }
@@ -94,4 +94,10 @@ fn combined_detects_faster_than_either_alone() {
         comb_rl <= shew_rl.min(cusum_rl),
         "combined (rl={comb_rl}) should detect ≤ min(shewhart={shew_rl}, cusum={cusum_rl})"
     );
+}
+
+#[test]
+fn combined_rejects_nan() {
+    let mut chart = default_combined();
+    assert!(chart.observe(f64::NAN).is_err());
 }

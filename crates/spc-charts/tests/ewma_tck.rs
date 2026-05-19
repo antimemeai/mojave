@@ -15,7 +15,7 @@ fn default_ewma() -> EwmaChart {
 #[test]
 fn ewma_first_observation() {
     let mut chart = default_ewma();
-    chart.observe(1.0);
+    chart.observe(1.0).unwrap();
     let expected = 0.2 * 1.0 + 0.8 * 0.0;
     assert!(
         (chart.z() - expected).abs() < 1e-10,
@@ -29,7 +29,7 @@ fn ewma_detects_sustained_shift() {
     let mut chart = default_ewma();
     let mut detected = false;
     for _ in 0..100 {
-        if chart.observe(1.5).is_out_of_control() {
+        if chart.observe(1.5).unwrap().is_out_of_control() {
             detected = true;
             break;
         }
@@ -46,7 +46,7 @@ fn ewma_z_bounded_by_observations() {
     for &x in &values {
         min_obs = min_obs.min(x);
         max_obs = max_obs.max(x);
-        chart.observe(x);
+        chart.observe(x).unwrap();
         assert!(
             chart.z() >= chart.z().min(0.0).min(min_obs) - 1e-10,
             "Z went below observation range"
@@ -70,7 +70,7 @@ fn ewma_asymptotic_limit_convergence() {
     let mut chart = EwmaChart::new(config).unwrap();
 
     for _ in 0..1000 {
-        chart.observe(0.0);
+        chart.observe(0.0).unwrap();
     }
 
     let asymptotic_ucl = 3.0 * 1.0 * (0.2 / 1.8_f64).sqrt();
@@ -87,7 +87,7 @@ fn ewma_asymptotic_limit_convergence() {
 fn ewma_reset() {
     let mut chart = default_ewma();
     for _ in 0..10 {
-        chart.observe(1.0);
+        chart.observe(1.0).unwrap();
     }
     chart.reset();
     assert_eq!(chart.z(), 0.0);
@@ -109,4 +109,17 @@ fn ewma_invalid_lambda() {
         l_sigma: 3.0,
     })
     .is_err());
+}
+
+#[test]
+fn ewma_rejects_nan() {
+    let mut chart = default_ewma();
+    assert!(chart.observe(f64::NAN).is_err());
+}
+
+#[test]
+fn ewma_rejects_infinity() {
+    let mut chart = default_ewma();
+    assert!(chart.observe(f64::INFINITY).is_err());
+    assert!(chart.observe(f64::NEG_INFINITY).is_err());
 }

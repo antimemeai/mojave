@@ -37,10 +37,10 @@ fn fir_detects_initial_shift_faster_than_standard() {
     let mut fir_rl = 50;
     let mut std_rl = 50;
     for (t, &x) in shift_values.iter().enumerate() {
-        if fir_rl == 50 && fir.observe(x).is_out_of_control() {
+        if fir_rl == 50 && fir.observe(x).unwrap().is_out_of_control() {
             fir_rl = t + 1;
         }
-        if std_rl == 50 && std.observe(x).is_out_of_control() {
+        if std_rl == 50 && std.observe(x).unwrap().is_out_of_control() {
             std_rl = t + 1;
         }
     }
@@ -54,10 +54,16 @@ fn fir_detects_initial_shift_faster_than_standard() {
 fn fir_reset_restores_head_start() {
     let mut chart = default_fir();
     for _ in 0..10 {
-        chart.observe(0.0);
+        chart.observe(0.0).unwrap();
     }
     chart.reset();
     assert!((chart.c_plus() - 2.5).abs() < 1e-10);
     assert!((chart.c_minus() - 2.5).abs() < 1e-10);
     assert_eq!(chart.n_observations(), 0);
+}
+
+#[test]
+fn fir_rejects_nan() {
+    let mut chart = default_fir();
+    assert!(chart.observe(f64::NAN).is_err());
 }

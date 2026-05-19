@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use crate::types::{ChartSignal, ControlLimits, SpcError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -38,7 +40,8 @@ pub struct ShewhartChart {
     sigma: f64,
     mu_0: f64,
     n: usize,
-    history: Vec<f64>,
+    history: VecDeque<f64>,
+    max_window: usize,
 }
 
 impl ShewhartChart {
@@ -53,6 +56,20 @@ impl ShewhartChart {
         let sigma = config.limits.sigma;
         let ucl = mu_0 + config.k_sigma * sigma;
         let lcl = mu_0 - config.k_sigma * sigma;
+
+        // Compute max window needed from the configured rule set.
+        let max_window = config
+            .rules
+            .iter()
+            .map(|rule| match rule {
+                ShewhartRule::WE1 => 1,
+                ShewhartRule::WE2 => 3,
+                ShewhartRule::WE3 => 5,
+                ShewhartRule::WE4 => 8,
+            })
+            .max()
+            .unwrap_or(1);
+
         Ok(Self {
             config,
             ucl,
@@ -60,35 +77,48 @@ impl ShewhartChart {
             sigma,
             mu_0,
             n: 0,
-            history: Vec::new(),
+            history: VecDeque::with_capacity(max_window),
+            max_window,
         })
     }
 
-    pub fn observe(&mut self, x: f64) -> ChartSignal {
-        debug_assert!(x.is_finite());
+    pub fn observe(&mut self, x: f64) -> Result<ChartSignal, SpcError> {
+        if !x.is_finite() {
+            return Err(SpcError::NonFiniteInput(x));
+        }
         self.n += 1;
         let z = (x - self.mu_0) / self.sigma;
-        self.history.push(z);
+
+        // Maintain bounded ring buffer.
+        if self.history.len() == self.max_window {
+            self.history.pop_front();
+        }
+        self.history.push_back(z);
 
         for &rule in &self.config.rules {
             if self.check_rule(rule) {
-                return ChartSignal::OutOfControl {
+                return Ok(ChartSignal::OutOfControl {
                     statistic: z,
                     observation_index: self.n - 1,
-                };
+                });
             }
         }
 
         if z.abs() > 2.0 {
-            ChartSignal::Warning { statistic: z }
+            Ok(ChartSignal::Warning { statistic: z })
         } else {
-            ChartSignal::InControl
+            Ok(ChartSignal::InControl)
         }
     }
 
     pub fn reset(&mut self) {
         self.n = 0;
         self.history.clear();
+    }
+
+    #[must_use]
+    pub fn max_window(&self) -> usize {
+        self.max_window
     }
 
     #[must_use]
@@ -102,30 +132,30 @@ impl ShewhartChart {
         match rule {
             ShewhartRule::WE1 => n >= 1 && h[n - 1].abs() > self.config.k_sigma,
             ShewhartRule::WE2 => {
-                if n < 2 {
+                if n < 3 {
                     return false;
                 }
-                let last3: Vec<f64> = h[n.saturating_sub(3)..].to_vec();
-                let above = last3.iter().filter(|&&z| z > 2.0).count();
-                let below = last3.iter().filter(|&&z| z < -2.0).count();
+                let start = n.saturating_sub(3);
+                let above = h.range(start..).filter(|&&z| z > 2.0).count();
+                let below = h.range(start..).filter(|&&z| z < -2.0).count();
                 above >= 2 || below >= 2
             }
             ShewhartRule::WE3 => {
-                if n < 4 {
+                if n < 5 {
                     return false;
                 }
-                let last5: Vec<f64> = h[n.saturating_sub(5)..].to_vec();
-                let above = last5.iter().filter(|&&z| z > 1.0).count();
-                let below = last5.iter().filter(|&&z| z < -1.0).count();
+                let start = n.saturating_sub(5);
+                let above = h.range(start..).filter(|&&z| z > 1.0).count();
+                let below = h.range(start..).filter(|&&z| z < -1.0).count();
                 above >= 4 || below >= 4
             }
             ShewhartRule::WE4 => {
                 if n < 8 {
                     return false;
                 }
-                let last8 = &h[n - 8..];
-                let all_above = last8.iter().all(|&z| z > 0.0);
-                let all_below = last8.iter().all(|&z| z < 0.0);
+                let start = n.saturating_sub(8);
+                let all_above = h.range(start..).all(|&z| z > 0.0);
+                let all_below = h.range(start..).all(|&z| z < 0.0);
                 all_above || all_below
             }
         }

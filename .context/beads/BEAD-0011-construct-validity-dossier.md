@@ -1,9 +1,10 @@
 ---
 id: BEAD-0011
 title: Construct validity dossier generation
-status: open
+status: deferred
 priority: nice-to-have
 created: 2026-05-11
+deferred: 2026-05-18
 ---
 
 ## Description
@@ -23,7 +24,12 @@ Structured validity argument for each eval suite — content, criterion, constru
 - Provides the structured answer to question 2 ("does the eval's design cast doubt on the result?")
 - Could be partially automated (item diagnostics, factor structure, sensitivity profile feed into validity evidence)
 
+## Why deferred
+
+This is the capstone, not a primitive — it aggregates evidence from every other subsystem (IRR, IRT/CAT, factor models, perturbation sensitivity, sequential testing) into a coherent validity argument. Building a crate for it now would be premature; the shape depends on having more system fabric in place first. Different level of abstraction than the measurement primitives.
+
 ## When to revisit
 
 - After IRR, sensitivity, and IRT are integrated (they provide the evidence for the dossier)
 - When building the reporting layer
+- When enough of the system exists to know what evidence slots actually look like

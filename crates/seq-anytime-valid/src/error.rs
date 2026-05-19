@@ -20,4 +20,6 @@ pub enum SeqError {
     InvalidMixingVariance(f64),
     #[error("practical significance delta must be positive, got {0}")]
     InvalidPracticalDelta(f64),
+    #[error("Bernoulli observation must be in [0, 1], got {0}")]
+    InvalidBernoulliObservation(f64),
 }

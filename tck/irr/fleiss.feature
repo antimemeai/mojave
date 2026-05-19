@@ -49,7 +49,7 @@ Feature: Fleiss kappa
     When I compute Fleiss kappa
     Then I get a Fleiss error about insufficient raters
 
-  Scenario: All-same-category is degenerate
+  Scenario: All-same-category yields perfect agreement
     Given a Fleiss matrix where all raters assign the same category
     When I compute Fleiss kappa
-    Then I get a Fleiss error about degenerate data
+    Then kappa is approximately 1.0 with tolerance 0.001

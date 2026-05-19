@@ -392,12 +392,12 @@ mod tests {
 
     fn sample_pool() -> ItemPool {
         ItemPool::new(vec![
-            ItemMetadata::new(ItemId::new("t1"), 0.5, 1.0, "math".into()),
-            ItemMetadata::new(ItemId::new("t2"), 0.7, 1.2, "math".into()),
-            ItemMetadata::new(ItemId::new("t3"), 0.3, 0.8, "code".into()),
-            ItemMetadata::new(ItemId::new("t4"), 0.9, 1.5, "code".into()),
-            ItemMetadata::new(ItemId::new("t5"), 0.6, 1.1, "reasoning".into()),
-            ItemMetadata::new(ItemId::new("t6"), 0.4, 0.9, "reasoning".into()),
+            ItemMetadata::new(ItemId::new("t1"), 0.5, 1.0, "math".into()).unwrap(),
+            ItemMetadata::new(ItemId::new("t2"), 0.7, 1.2, "math".into()).unwrap(),
+            ItemMetadata::new(ItemId::new("t3"), 0.3, 0.8, "code".into()).unwrap(),
+            ItemMetadata::new(ItemId::new("t4"), 0.9, 1.5, "code".into()).unwrap(),
+            ItemMetadata::new(ItemId::new("t5"), 0.6, 1.1, "reasoning".into()).unwrap(),
+            ItemMetadata::new(ItemId::new("t6"), 0.4, 0.9, "reasoning".into()).unwrap(),
         ])
         .unwrap()
     }
@@ -418,6 +418,7 @@ mod tests {
                     discrimination,
                     domain.into(),
                 )
+                .unwrap()
             })
             .collect();
         ItemPool::new(items).unwrap()
@@ -482,8 +483,8 @@ mod tests {
     #[test]
     fn max_exposure_excludes_overexposed() {
         let mut items = vec![
-            ItemMetadata::new(ItemId::new("t1"), 0.5, 1.0, "math".into()),
-            ItemMetadata::new(ItemId::new("t2"), 0.7, 1.2, "math".into()),
+            ItemMetadata::new(ItemId::new("t1"), 0.5, 1.0, "math".into()).unwrap(),
+            ItemMetadata::new(ItemId::new("t2"), 0.7, 1.2, "math".into()).unwrap(),
         ];
         items[0].exposure_count = 5;
         let pool = ItemPool::new(items).unwrap();

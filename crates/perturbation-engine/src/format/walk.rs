@@ -51,6 +51,9 @@ pub fn longest_string_region(body: &[u8]) -> Option<(usize, usize)> {
 
 /// Apply format atoms to the substring at `region` and splice back
 /// into `body`, returning the new bytes.
+///
+/// The perturbed content is JSON-escaped before splicing so that the
+/// surrounding JSON envelope remains parseable.
 pub fn apply_atoms(
     body: &[u8],
     atoms: &FormatAtoms,
@@ -59,12 +62,62 @@ pub fn apply_atoms(
     let (start, end) = region;
     let original = std::str::from_utf8(&body[start..end])
         .map_err(|_| ApplyError::InvalidUtf8 { start, end })?;
-    let perturbed = transform_region(original, atoms);
-    let mut out = Vec::with_capacity(body.len() + perturbed.len());
+    // Unescape the JSON source so transform_region sees logical characters.
+    let unescaped = json_unescape(original);
+    let perturbed = transform_region(&unescaped, atoms);
+    // Re-escape so the result is valid inside a JSON string literal.
+    let escaped = json_escape(&perturbed);
+    let mut out = Vec::with_capacity(body.len() + escaped.len());
     out.extend_from_slice(&body[..start]);
-    out.extend_from_slice(perturbed.as_bytes());
+    out.extend_from_slice(escaped.as_bytes());
     out.extend_from_slice(&body[end..]);
     Ok(out)
+}
+
+/// Escape a string for embedding inside a JSON string literal (between quotes).
+fn json_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for ch in s.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if c.is_control() => {
+                use std::fmt::Write as _;
+                let _ = write!(out, "\\u{:04x}", c as u32);
+            }
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+/// Unescape a JSON string interior (the content between quotes) into logical characters.
+fn json_unescape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars();
+    while let Some(ch) = chars.next() {
+        if ch == '\\' {
+            match chars.next() {
+                Some('n') => out.push('\n'),
+                Some('r') => out.push('\r'),
+                Some('t') => out.push('\t'),
+                Some('"') => out.push('"'),
+                Some('\\') => out.push('\\'),
+                Some('/') => out.push('/'),
+                Some(other) => {
+                    out.push('\\');
+                    out.push(other);
+                }
+                None => out.push('\\'),
+            }
+        } else {
+            out.push(ch);
+        }
+    }
+    out
 }
 
 fn transform_region(original: &str, atoms: &FormatAtoms) -> String {
@@ -162,7 +215,8 @@ mod tests {
         let region = longest_string_region(body).unwrap();
         let out = apply_atoms(body, &atoms, region).unwrap();
         let s = std::str::from_utf8(&out).unwrap();
-        assert!(s.contains("question\nwhat is 2+2."), "perturbed body: {s}");
+        // The newline separator is JSON-escaped in the output
+        assert!(s.contains("question\\nwhat is 2+2."), "perturbed body: {s}");
     }
 
     #[test]
@@ -222,7 +276,10 @@ mod tests {
         let region = longest_string_region(body).unwrap();
         let out = apply_atoms(body, &atoms, region).unwrap();
         let s = std::str::from_utf8(&out).unwrap();
-        assert!(s.contains(r#"\"Question: hi?\""#), "got {s}");
+        // Quotes are JSON-escaped as \" inside the string literal
+        assert!(s.contains("\\\"Question: hi?\\\""), "got {s}");
+        // The whole thing must still be valid JSON
+        let _: serde_json::Value = serde_json::from_slice(&out).unwrap();
     }
 
     #[test]
@@ -237,7 +294,10 @@ mod tests {
         let region = longest_string_region(body).unwrap();
         let out = apply_atoms(body, &atoms, region).unwrap();
         let s = std::str::from_utf8(&out).unwrap();
-        assert!(s.contains(r#"\n\nhello"#), "got {s}");
+        // Newlines are JSON-escaped as \n inside the string literal
+        assert!(s.contains("\\n\\nhello"), "got {s}");
+        // The whole thing must still be valid JSON
+        let _: serde_json::Value = serde_json::from_slice(&out).unwrap();
     }
 
     #[test]

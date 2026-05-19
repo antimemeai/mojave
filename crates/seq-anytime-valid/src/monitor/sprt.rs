@@ -45,7 +45,7 @@ impl SprtMonitor {
         }
         let log_lr = match self.config.family {
             DataFamily::Bernoulli => {
-                likelihood::bernoulli_log_lr(observation, self.config.theta_0, self.config.theta_1)
+                likelihood::bernoulli_log_lr(observation, self.config.theta_0, self.config.theta_1)?
             }
             DataFamily::Normal { known_variance } => {
                 let sigma_sq = known_variance.unwrap_or(1.0);

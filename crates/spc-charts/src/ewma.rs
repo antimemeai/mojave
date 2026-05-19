@@ -55,23 +55,32 @@ impl EwmaChart {
         })
     }
 
-    pub fn observe(&mut self, x: f64) -> ChartSignal {
-        debug_assert!(x.is_finite());
+    pub fn observe(&mut self, x: f64) -> Result<ChartSignal, SpcError> {
+        if !x.is_finite() {
+            return Err(SpcError::NonFiniteInput(x));
+        }
         self.n += 1;
         self.z = self.lambda * x + self.one_minus_lambda * self.z;
 
-        let time_factor = 1.0 - self.one_minus_lambda.powi(2 * self.n as i32);
+        // For large n, (1-lambda)^(2n) is indistinguishable from 0 within f64
+        // precision. Use steady-state formula (time_factor = 1.0) to avoid
+        // integer overflow in powi when 2*n exceeds i32::MAX.
+        let time_factor = if self.n > 1000 {
+            1.0
+        } else {
+            1.0 - self.one_minus_lambda.powi(2 * self.n as i32)
+        };
         let limit_width = self.l_sigma * self.sigma * (self.lambda_ratio * time_factor).sqrt();
         let ucl = self.mu_0 + limit_width;
         let lcl = self.mu_0 - limit_width;
 
         if self.z > ucl || self.z < lcl {
-            ChartSignal::OutOfControl {
+            Ok(ChartSignal::OutOfControl {
                 statistic: self.z,
                 observation_index: self.n - 1,
-            }
+            })
         } else {
-            ChartSignal::InControl
+            Ok(ChartSignal::InControl)
         }
     }
 
