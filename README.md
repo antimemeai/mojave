@@ -231,11 +231,12 @@ statistical rigor of a clinical trial — is not.
 crates/            Rust workspace (13 crates)
 python/            mojave-calibrate package (uv + lockfile)
 tck/               Behavioral specs (71 Gherkin .feature files)
+scripts/           Operational tooling (hooks, measurement pipeline)
+templates/         Parametric LaTeX report templates (run cards)
 docs/
   adr/             Architectural Decision Records
   specs/           Design specifications
   reference/       Validation methodology, bibliographies
-.context/          LLM working memory (beads, decisions, lit-reviews)
 ```
 
 ## Development
