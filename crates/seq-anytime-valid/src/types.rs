@@ -73,6 +73,14 @@ pub struct MsprtConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BernoulliMsprtConfig {
+    pub p0: f64,
+    pub beta_a: f64,
+    pub beta_b: f64,
+    pub max_samples: Option<usize>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConfSeqConfig {
     pub alpha: f64,
     pub bound_type: ConfSeqBoundType,
