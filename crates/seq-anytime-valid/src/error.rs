@@ -22,4 +22,8 @@ pub enum SeqError {
     InvalidPracticalDelta(f64),
     #[error("Bernoulli observation must be in [0, 1], got {0}")]
     InvalidBernoulliObservation(f64),
+    #[error("null proportion p0 must be in (0, 1), got {0}")]
+    InvalidNullProportion(f64),
+    #[error("Beta shape parameter must be positive, got a={a}, b={b}")]
+    InvalidBetaParams { a: f64, b: f64 },
 }
