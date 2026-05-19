@@ -1,0 +1,6 @@
+domain,accuracy,ci_low,ci_high,n
+Arithmetic,0.713,0.661,0.760,210
+Commonsense,0.602,0.548,0.654,198
+Reading,0.668,0.611,0.721,176
+Code,0.541,0.479,0.602,141
+Science,0.689,0.621,0.750,95

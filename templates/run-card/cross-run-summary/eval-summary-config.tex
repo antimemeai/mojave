@@ -1,0 +1,105 @@
+% ============================================================================
+%  CROSS-RUN EVAL SUMMARY  --  PARAMETER FILE
+%  One benchmark, many runs (models / replicates / dates), aggregated.
+%  Edit ONLY this file for a normal summary. Engine lives in eval-summary.tex.
+%  Empty value (e.g. \rcset{repro.verdict}{}) -> em-dash placeholder.
+% ============================================================================
+
+% ---------------------------------------------------------------- HEADER ----
+\rcset{summary.id}        {MOJAVE-XRUN-2026-Q2-014}
+\rcset{date.issued}       {2026-05-12}
+\rcset{benchmark.name}    {Mojave-QA}
+\rcset{benchmark.version} {v2.3.1 \textnormal{(commit }\texttt{a91c4ee}\textnormal{)}}
+\rcset{benchmark.source}  {\texttt{git@github.com:mojave-bench/mojave-qa}}
+\rcset{n.runs}            {62}
+\rcset{run.selection}     {All evalkit runs against \texttt{a91c4ee},
+                           2026-02-01 to 2026-05-10, status \texttt{complete},
+                           $\ge 800$ items scored. Smoke/CI runs excluded.}
+\rcset{aggregator.org}    {Northgate Eval Lab}
+\rcset{aggregator.tool}   {evalkit-aggregate 0.4.0}
+
+% ------------------------------------------------- COHORT & COMPARABILITY ----
+\rcset{cohort.pinned}     {PASS --- 62/62 runs share benchmark commit
+                           \texttt{a91c4ee}. 0 version mismatches.}
+\rcset{cohort.models}     {9 distinct models / 17 distinct serving configs.}
+\rcset{cohort.replicates} {17 configs; 1--6 replicates each (median 3).}
+\rcset{cohort.itemset}    {PASS --- all runs scored the same 820-item set.}
+
+% ----------------------------------------------------- CROSS-RUN ACCURACY ----
+\rcset{acc.pooled}        {0.6391 \textnormal{(unweighted mean of run accuracies)}}
+\rcset{acc.sd}            {0.0418}
+\rcset{acc.min}           {0.5512}
+\rcset{acc.max}           {0.7106}
+\rcset{acc.range}         {0.1594}
+\rcset{acc.best}          {Atlas-70B-Instruct @ \texttt{3d9f\dots} --- 0.7106}
+\rcset{acc.worst}         {Mistral-7B-base @ \texttt{c41a\dots} --- 0.5512}
+% Histogram: bin COUNTS of per-run accuracy, low->high. Empty to hide.
+\rcset{acc.hist}          {2,5,9,14,12,9,7,4}
+\rcset{meta.pooled}       {0.6378}
+\rcset{meta.tau2}         {0.00171}
+\rcset{meta.i2}           {0.86}
+\rcset{meta.caveat}       {Random-effects estimate is DESCRIPTIVE: $N{=}62$
+                           runs are not independent draws (shared item bank,
+                           overlapping model families). Not a formal
+                           meta-analysis; $I^2$ is inflated by determinism.}
+
+% --------------------------------------------------------------- RANKING ----
+\rcset{rank.indistinct}   {214 of 1891 run pairs have overlapping Wilson 95\%
+                           CIs (point-estimate order is not significant).}
+\rcset{rank.topset}       {Top-rank set: 7 runs are not significantly beaten
+                           by the \#1 run (CI overlap with rank 1).}
+
+% -------------------------------------- REPRODUCIBILITY (REPLICATE RUNS) ----
+\rcset{repro.groups}      {17 replicate groups (identical model + serving +
+                           perturbation seed plan).}
+\rcset{repro.sd}          {0.0061 \textnormal{(pooled within-config accuracy SD)}}
+\rcset{repro.maxswing}    {0.0204 \textnormal{(Llama-3-8B config, 5 replicates)}}
+\rcset{repro.verdict}     {WITHIN NOISE --- observed within-config SD
+                           $\approx$ expected Monte-Carlo SD
+                           ($\sqrt{p(1-p)/n}\approx 0.0167$ at $p{=}0.64$,
+                           $n{=}820$). No evidence of run-to-run drift.}
+
+% ------------------------------- CROSS-RUN INSTRUMENT STABILITY (IRT) ----
+\rcset{irt.diff.rho}      {0.913}
+\rcset{irt.diff.rho.lo}   {0.901}
+\rcset{irt.diff.rho.hi}   {0.924}
+\rcset{irt.drift.mean}    {0.004 \textnormal{(mean shift in item }$b$\textnormal{)}}
+\rcset{irt.drift.sd}      {0.118 \textnormal{(SD of per-item }$b$\textnormal{ shift)}}
+\rcset{irt.flips}         {29 items change floor/ceiling status across runs.}
+\rcset{irt.dif}           {41 items exceed $|\Delta b|>0.5$ between some run
+                           pair (DIF-like; likely model-specific).}
+
+% ------------------------ PERTURBATION CONSISTENCY ACROSS RUNS ----
+\rcset{pert.sens.jac}     {0.71}
+\rcset{pert.sens.jac.lo}  {0.66}
+\rcset{pert.sens.jac.hi}  {0.75}
+\rcset{pert.stab.jac}     {0.88}
+\rcset{pert.stab.jac.lo}  {0.85}
+\rcset{pert.stab.jac.hi}  {0.91}
+\rcset{pert.dim.repl}     {0.79 \textnormal{(fraction of sensitive items with a
+                           consistent dominant perturbation dimension)}}
+
+% ------------------------------------- SEQUENTIAL STOPPING META ----
+\rcset{stop.method}       {Per-run Bernoulli mSPRT, $\mathrm{Beta}(1,1)$ mix,
+                           $\alpha{=}0.05$ (uniform across cohort).}
+\rcset{stop.medmed}       {327 \textnormal{(median of per-run median stop times)}}
+\rcset{stop.iqr.lo}       {271}
+\rcset{stop.iqr.hi}       {419}
+\rcset{stop.frac.q4}      {0.05 \textnormal{(runs stopping before }$N/4$\textnormal{)}}
+\rcset{stop.frac.half}    {0.38 \textnormal{(runs stopping before }$N/2$\textnormal{)}}
+
+% ----------------------------------------------- RAW DATA REFERENCE ----
+\rcset{companion.file}    {\texttt{mojave-xrun-2026-q2-014.bundle.jsonl}}
+\rcset{companion.hash}    {\texttt{sha256:4c2d\dots e810}}
+\rcset{companion.contents}{Per-run summary records, per-item difficulty
+                           matrix across runs, sensitive/stable set
+                           memberships per run, per-run stopping-time
+                           vectors, and the cohort manifest.}
+
+% ---------------------------------------------------------- DISCLAIMERS ----
+% Defaults defined in eval-summary.tex; override here only if needed.
+% \rcset{disc.dependence}{...}
+% \rcset{disc.identical}{...}
+% \rcset{disc.heterogeneity}{...}
+% \rcset{disc.ranking}{...}
+% \rcset{disc.meta}{...}

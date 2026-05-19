@@ -1,0 +1,6 @@
+domain,mean_acc,sd,runs
+Arithmetic,0.701,0.031,62
+Commonsense,0.598,0.044,62
+Reading,0.661,0.036,62
+Code,0.529,0.052,60
+Science,0.677,0.039,58

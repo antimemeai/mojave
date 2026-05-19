@@ -1,0 +1,112 @@
+% ============================================================================
+%  MOJAVE RUN CARD  --  PARAMETER FILE
+%  Edit ONLY this file for a normal run. Do not touch runcard.tex.
+%  Every \rcset{key}{value} below maps to a Required Field in the spec.
+%  Leave a value empty (e.g. \rcset{q3.note}{}) to render an em-dash placeholder.
+% ============================================================================
+
+% ---------------------------------------------------------------- HEADER ----
+\rcset{run.id}            {MOJAVE-2026-0419-7F3A}
+\rcset{date.issued}       {2026-04-19}
+\rcset{benchmark.name}    {Mojave-QA}
+\rcset{benchmark.version} {v2.3.1 \textnormal{(commit }\texttt{a91c4ee}\textnormal{)}}
+\rcset{benchmark.source}  {\texttt{git@github.com:mojave-bench/mojave-qa}}
+\rcset{model.name}        {Atlas-70B-Instruct}
+\rcset{model.revision}    {\texttt{sha256:3d9f\dots c014}}
+\rcset{model.quant}       {bf16 (no quantization)}
+\rcset{model.serving}     {vLLM 0.6.3, tp=4, max\_tokens=512}
+\rcset{evaluator.org}     {Northgate Eval Lab}
+\rcset{evaluator.tool}    {evalkit 0.11.2}
+
+% ---------------------------------------------------------------- DESIGN ----
+\rcset{n.items}           {820}
+\rcset{n.variants}        {48}
+\rcset{perturb.design}    {Fully crossed block design: 3 dimensions ---
+                           option order ($\times 4$ seeds),
+                           temperature ($\times 3$: 0.0, 0.5, 1.0),
+                           prompt template ($\times 4$ paraphrases).
+                           $4\times3\times4 = 48$ variants per item.}
+\rcset{inference.config}  {Per-variant: temperature $\in\{0.0,0.5,1.0\}$;
+                           prompt template id $\in\{$T0..T3$\}$;
+                           option-order seed $\in\{$1001,1002,1003,1004$\}$;
+                           top\_p $=1.0$; greedy decode at $T{=}0$.}
+
+% ------------------------------------------------------ AGGREGATE RESULTS ----
+\rcset{acc.overall}       {0.6427}
+\rcset{wilson.lower}      {0.6098}
+\rcset{wilson.upper}      {0.6744}
+\rcset{wilson.width}      {0.0646}
+\rcset{acc.baseline}      {0.6585 \textnormal{(baseline variant: T0, seed 1001, }$T{=}0$\textnormal{)}}
+% Per-domain table is OPTIONAL. It is read from domains.csv if that file
+% exists; otherwise this section auto-collapses. See domains.csv for schema.
+
+% ----------------------------------------------- INSTRUMENT QUALITY (IRT) ----
+\rcset{irt.model}         {1PL / Rasch (primary); 2PL fitted for exploratory
+                           contrast only.}
+\rcset{irt.diff.mean}     {0.02}
+\rcset{irt.diff.sd}       {1.13}
+\rcset{irt.diff.min}      {-3.41}
+\rcset{irt.diff.max}      {3.88}
+% Histogram: comma-separated bin COUNTS, low->high. Leave empty to hide.
+\rcset{irt.diff.hist}     {6,19,54,121,198,176,131,67,34,14}
+\rcset{irt.disc.mean}     {0.91}
+\rcset{irt.disc.sd}       {0.38}
+\rcset{irt.disc.min}      {-0.07}
+\rcset{irt.disc.max}      {2.14}
+\rcset{irt.disc.hist}     {3,12,48,140,205,180,150,55,21,6}
+\rcset{irt.disc.caveat}   {2PL discrimination estimates are EXPLORATORY; a
+                           negative minimum indicates at least one misfitting
+                           item. Treat magnitudes, not just signs, with care.}
+\rcset{irt.floor.items}   {11}
+\rcset{irt.ceil.items}    {38}
+\rcset{irt.nearzero.disc} {17}
+\rcset{q3.summary}        {Mean $Q_3 = -0.014$, SD $0.061$, max $0.287$.}
+\rcset{q3.count.gt2}      {23}
+\rcset{q3.note}           {Local dependence is present and acknowledged:
+                           23 item pairs exceed the $|Q_3|>0.2$ heuristic.
+                           Independence assumptions below are violated by
+                           construction (see Disclaimers).}
+
+% -------------------------------------------- PERTURBATION SENSITIVITY ----
+% Histogram of per-item fraction-correct across variants (0..1), binned.
+\rcset{stab.hist}         {142,38,29,24,31,40,55,78,110,273}
+\rcset{stab.stable}       {415}
+\rcset{stab.sensitive}    {206}
+\rcset{dim.order}         {88}
+\rcset{dim.temp}          {41}
+\rcset{dim.prompt}        {59}
+\rcset{dim.mixed}         {18}
+\rcset{spearman.diff.rho} {-0.412}
+\rcset{spearman.diff.lo}  {-0.478}
+\rcset{spearman.diff.hi}  {-0.339}
+\rcset{spearman.disc.rho} {0.231}
+\rcset{spearman.disc.lo}  {0.151}
+\rcset{spearman.disc.hi}  {0.308}
+
+% ----------------------------------- SEQUENTIAL STOPPING (RETROSPECTIVE) ----
+\rcset{sprt.method}       {Bernoulli mSPRT}
+\rcset{sprt.beta}         {Beta mixing prior $\mathrm{Beta}(\alpha{=}1,\beta{=}1)$}
+\rcset{sprt.alpha}        {0.05}
+\rcset{sprt.nperm}        {2000}
+\rcset{sprt.median.stop}  {312}
+\rcset{sprt.iqr.lo}       {248}
+\rcset{sprt.iqr.hi}       {404}
+\rcset{sprt.frac.q4}      {0.07}
+\rcset{sprt.frac.half}    {0.41}
+\rcset{sprt.frac.full}    {0.93}
+
+% ----------------------------------------------- RAW DATA REFERENCE ----
+\rcset{companion.file}    {\texttt{mojave-2026-0419-7f3a.raw.jsonl}}
+\rcset{companion.hash}    {\texttt{sha256:b7e1\dots 9af2}}
+\rcset{companion.contents}{Trial records (one per item$\times$variant),
+                           fitted IRT parameters (1PL \& 2PL),
+                           permutation stopping times,
+                           and the run manifest.}
+
+% ---------------------------------------------------------- DISCLAIMERS ----
+% These have sensible defaults defined in runcard.tex. Override only if needed.
+% \rcset{disc.localindep}{...}
+% \rcset{disc.noref}{...}
+% \rcset{disc.2pl}{...}
+% \rcset{disc.unidim}{...}
+% \rcset{disc.stopping}{...}

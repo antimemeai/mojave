@@ -2,8 +2,8 @@
 """Orchestrate Inspect AI runs for each variant in the manifest.
 
 Distributes variants round-robin across multiple vLLM endpoints for
-parallel execution. Each endpoint runs variants sequentially via
-subprocess, but multiple endpoints run concurrently via threads.
+parallel execution. Skips variants that already have .eval logs on disk,
+making the script resumable and safe to restart with different endpoints.
 
 Requires: inspect-ai, inspect-evals, vLLM running as OpenAI-compatible server.
 """
@@ -16,6 +16,13 @@ import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+
+
+def variant_complete(output_dir: Path, vid: str) -> bool:
+    log_dir = output_dir / vid
+    if not log_dir.exists():
+        return False
+    return any(f.suffix == ".eval" for f in log_dir.iterdir())
 
 
 def build_inspect_cmd(
@@ -32,14 +39,13 @@ def build_inspect_cmd(
         "eval",
         "inspect_evals/arc_challenge",
         "--model",
-        "openai/Qwen2.5-7B-Instruct",
+        "openai/Qwen/Qwen2.5-7B-Instruct",
         "-T",
         f"shuffle_seed={order_seed}",
         "--temperature",
         str(temp),
         "--log-dir",
         str(output_dir / vid),
-        "--no-sandbox",
     ]
 
     if prompt != "default":
@@ -56,6 +62,11 @@ def run_variant(
     total: int,
 ) -> tuple[str, bool, str]:
     vid = variant["variant_id"]
+
+    if variant_complete(output_dir, vid):
+        print(f"[{index}/{total}] {vid} -> SKIP (already done)", file=sys.stderr)
+        return vid, True, ""
+
     cmd = build_inspect_cmd(variant, output_dir)
     env = os.environ.copy()
     env["OPENAI_BASE_URL"] = base_url
@@ -65,10 +76,7 @@ def run_variant(
     ok = result.returncode == 0
     err = result.stderr[:200] if not ok else ""
     status = "OK" if ok else f"FAILED: {err}"
-    print(
-        f"[{index}/{total}] {vid} -> {status}",
-        file=sys.stderr,
-    )
+    print(f"[{index}/{total}] {vid} -> {status}", file=sys.stderr)
     return vid, ok, err
 
 
@@ -88,8 +96,11 @@ def main() -> None:
     total = len(variants)
     n_workers = len(endpoints)
 
+    already = sum(1 for v in variants if variant_complete(output_dir, v["variant_id"]))
+    remaining = total - already
+
     print(
-        f"Running {total} variants across {n_workers} endpoint(s)",
+        f"{already} already done, {remaining} remaining, {n_workers} endpoint(s)",
         file=sys.stderr,
     )
 
