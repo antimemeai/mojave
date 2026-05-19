@@ -3,6 +3,19 @@
 Items we've considered, decided to defer, but must not forget.
 Design decisions should account for these even if we're not building them yet.
 
+---
+
+## Completed (moved here for reference)
+
+These were previously on the future work list. They're built, tested, and merged.
+
+- **IRT / item analysis (BEAD-0005)** — `mojave-calibrate` IrtCalibrator wrapping py-irt. 2PL Bayesian IRT with GPU support. Closed 2026-05-19.
+- **Factor models (BEAD-0006)** — `mojave-calibrate` FactorCalibrator (deepirtools IWAVE) + CfaCalibrator (semopy SEM/CFA). Closed 2026-05-19.
+- **Adaptive testing / CAT (BEAD-0007)** — `eval-design` crate. Randomized item selection, anti-gaming scheduling, CAT engine with 2PL ability estimation. Closed.
+- **Game-theoretic eval design (BEAD-0010)** — Folded into `eval-design` crate. Mechanism design for adversarial robustness of evaluations. Closed.
+
+---
+
 ## Pre-registration (eval-prereg)
 
 ICH E9-style analysis plan declaration. Hash the plan upfront, enforce
@@ -37,31 +50,36 @@ Instrumentation is always on; sealing is opt-in. Massive trust upside
 for defense deployments, significant implementation cost. Design the
 audit system so sealing can be added without restructuring.
 
-## IRT / item analysis (BEAD-0005)
-
-Item Response Theory for identifying which eval tasks are doing work
-and which are redundant. Python layer (torch_measure integration).
-Depends on the eval-ingest pipeline being live.
-
-## Factor models (BEAD-0006)
-
-Latent factor analysis for detecting redundancy across eval tasks.
-Python layer. Depends on having enough longitudinal data.
-
-## Adaptive testing / CAT (BEAD-0007)
-
-Computerized adaptive testing — select the next eval item based on
-what you've learned so far. Reduces eval cost by skipping items
-that won't change the conclusion. Depends on IRT calibration.
-
 ## Construct validity dossier (BEAD-0011)
 
 Systematic documentation of what an eval actually measures.
 Convergent/discriminant validity, content coverage analysis.
-Meta-layer over the math crates.
+Meta-layer over the math crates. Deferred 2026-05-18.
 
-## Game-theoretic eval design (BEAD-0010)
+## Range orchestration (BEAD-0013)
 
-Mechanism design for eval systems where agents have incentives
-to game the evaluation. Adversarial robustness of the measurement
-itself. Research-grade, not near-term.
+Repeatable agent evaluation environments. Firecracker microVM
+orchestration, cell-runner for isolated per-cell execution,
+reproducible ranges. Substantial infrastructure lift — depends
+on the measurement stack being stable first.
+
+## REEval integration
+
+Stanford AIMS amortized calibration. Stub exists in
+`mojave-calibrate` (`reeval_stub.py`). Blocked on REEval
+becoming pip-installable and dropping the CUDA 12.2 +
+flash-attention + Llama 8B embedding requirements.
+
+## Runner integrations
+
+Live integration with eval runners (Inspect, HAL, lm-eval-harness).
+The ingest layer (`eval-ingest`) accepts their output formats;
+what's missing is the glue that makes this zero-config for
+end users. Probably a thin adapter per runner.
+
+## Reporting surface
+
+Human-readable diagnostic reports. Control chart visualizations,
+item analysis summaries, factor structure plots, reliability
+dashboards. The math produces the numbers; this makes them
+legible to stakeholders who don't read covariance matrices.
