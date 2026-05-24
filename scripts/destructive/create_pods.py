@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""Create vLLM eval pods on RunPod.
+"""Create vLLM eval pods on RunPod from a deployment profile.
 
-Uses the vllm/vllm-openai image so pods come up serving automatically —
-no SSH setup needed. Model flags go via docker_args, env vars via env.
+Uses the vllm/vllm-openai image so pods come up serving automatically.
+Model/GPU config loaded from a YAML profile.
 
-See RUNPOD_RUNBOOK.md for lessons learned.
+Usage:
+    python create_pods.py profiles/qwen-7b-3090.yaml
+    python create_pods.py profiles/qwen-72b-h100.yaml
+    python create_pods.py profiles/qwen-7b-3090.yaml --pods 4
 """
 
-from __future__ import annotations
-
+import argparse
 import json
 import subprocess
 import sys
@@ -16,39 +18,11 @@ import time
 from pathlib import Path
 
 import runpod
+from profiles import load_profile
 
-TOTAL_PODS = 8
-BATCH_SIZE = 3
 PODS_FILE = Path("data/destructive/pods.json")
 ENDPOINTS_FILE = Path("data/destructive/endpoints.json")
-
-GPU_TYPE = "NVIDIA GeForce RTX 3090"
-
-DOCKER_ARGS = (
-    "--model Qwen/Qwen2.5-7B-Instruct "
-    "--max-model-len 4096 "
-    "--enforce-eager "
-    "--gpu-memory-utilization 0.9 "
-    "--tensor-parallel-size 1 "
-    "--host 0.0.0.0 "
-    "--port 8000"
-)
-
-POD_ENV = {
-    "VLLM_USE_V1": "0",
-}
-
-POD_CONFIG = dict(
-    image_name="vllm/vllm-openai:latest",
-    gpu_type_id=GPU_TYPE,
-    gpu_count=1,
-    volume_in_gb=50,
-    container_disk_in_gb=50,
-    ports="8000/http",
-    cloud_type="ALL",
-    docker_args=DOCKER_ARGS,
-    env=POD_ENV,
-)
+META_FILE = Path("data/destructive/meta.json")
 
 
 def load_pods() -> list[dict]:
@@ -78,14 +52,25 @@ def check_endpoint(pod_id: str) -> bool:
         return False
 
 
-def create_batch(start_index: int, count: int) -> list[dict]:
+def create_batch(profile: dict, start_index: int, count: int) -> list[dict]:
     created = []
     for i in range(count):
         idx = start_index + i
         name = f"mojave-{idx:02d}"
         print(f"  Creating {name}...", file=sys.stderr)
         try:
-            pod = runpod.create_pod(name=name, **POD_CONFIG)
+            pod = runpod.create_pod(
+                name=name,
+                image_name="vllm/vllm-openai:latest",
+                gpu_type_id=profile["gpu_type"],
+                gpu_count=profile["gpu_count"],
+                volume_in_gb=profile["volume_gb"],
+                container_disk_in_gb=profile["container_disk_gb"],
+                ports="8000/http",
+                cloud_type="ALL",
+                docker_args=profile["docker_args"],
+                env=profile["env"],
+            )
             print(f"  {name}: {pod['id']}", file=sys.stderr)
             created.append({"id": pod["id"], "name": name})
         except Exception as e:
@@ -94,30 +79,42 @@ def create_batch(start_index: int, count: int) -> list[dict]:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Create vLLM eval pods from a profile")
+    parser.add_argument("profile", type=Path, help="Path to profile YAML")
+    parser.add_argument("--pods", type=int, default=None, help="Override total pod count")
+    args = parser.parse_args()
+
+    profile = load_profile(args.profile)
+    total_pods = args.pods or profile["total_pods"]
+    batch_size: int = profile["batch_size"]
+    cost_per_pod: float = profile["hourly_cost_per_pod"]
+
     runpod.check_credentials()
     existing = load_pods()
     have = len(existing)
-    need = TOTAL_PODS - have
+    need = total_pods - have
 
     if need <= 0:
         print(f"Already have {have} pods.", file=sys.stderr)
         return
 
-    print(f"Creating {need} pods ({BATCH_SIZE} at a time)...", file=sys.stderr)
-    print(f"Image: {POD_CONFIG['image_name']}", file=sys.stderr)
-    print(f"GPU: {GPU_TYPE}", file=sys.stderr)
-    print(f"Args: {DOCKER_ARGS}", file=sys.stderr)
-    print(f"Env: {POD_ENV}", file=sys.stderr)
+    total_cost = total_pods * cost_per_pod
+    print(f"Profile: {args.profile.name}", file=sys.stderr)
+    print(f"Model: {profile['model']}", file=sys.stderr)
+    print(f"GPU: {profile['gpu_type']} x{profile['gpu_count']}", file=sys.stderr)
+    print(f"Creating {need} pods ({batch_size} at a time)...", file=sys.stderr)
+    cost_msg = f"${total_cost:.2f}/hr ({total_pods} pods x ${cost_per_pod}/hr)"
+    print(f"Estimated cost: {cost_msg}", file=sys.stderr)
 
     all_pods = list(existing)
     created_count = 0
 
     while created_count < need:
-        batch_size = min(BATCH_SIZE, need - created_count)
+        this_batch = min(batch_size, need - created_count)
         start_idx = have + created_count
-        print(f"\n--- Batch {created_count // BATCH_SIZE + 1} ---", file=sys.stderr)
+        print(f"\n--- Batch {created_count // batch_size + 1} ---", file=sys.stderr)
 
-        batch = create_batch(start_idx, batch_size)
+        batch = create_batch(profile, start_idx, this_batch)
         if not batch:
             print("Batch failed entirely. Stopping.", file=sys.stderr)
             break
@@ -125,13 +122,12 @@ def main() -> None:
         all_pods.extend(batch)
         save_pods(all_pods)
         created_count += len(batch)
-        print(f"Progress: {len(all_pods)}/{TOTAL_PODS}", file=sys.stderr)
+        print(f"Progress: {len(all_pods)}/{total_pods}", file=sys.stderr)
         time.sleep(5)
 
-    # Poll for vLLM readiness
     print("\nAll pods created. Polling for vLLM readiness...", file=sys.stderr)
     pod_ids = [p["id"] for p in all_pods]
-    ready = set()
+    ready: set[str] = set()
     for _attempt in range(90):
         for pid in pod_ids:
             if pid not in ready and check_endpoint(pid):
@@ -142,7 +138,17 @@ def main() -> None:
         time.sleep(10)
 
     endpoints = [f"https://{pid}-8000.proxy.runpod.net/v1" for pid in ready]
+    ENDPOINTS_FILE.parent.mkdir(parents=True, exist_ok=True)
     ENDPOINTS_FILE.write_text(json.dumps(endpoints, indent=2) + "\n")
+
+    meta = {
+        "profile": str(args.profile),
+        "model": profile["model"],
+        "hourly_cost_per_pod": cost_per_pod,
+        "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+    META_FILE.write_text(json.dumps(meta, indent=2) + "\n")
+
     print(f"\n{len(endpoints)}/{len(pod_ids)} endpoints ready -> {ENDPOINTS_FILE}", file=sys.stderr)
 
     if len(ready) < len(pod_ids):
