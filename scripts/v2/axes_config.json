@@ -1,0 +1,10 @@
+{
+  "axes": [
+    {"name": "prompt_template", "levels": ["lm-eval-default", "bare", "cot", "letter-only", "verbose-rationale"]},
+    {"name": "system_prompt", "levels": ["none", "helpful", "domain-expert", "safety-aware"]},
+    {"name": "n_shot_frac", "levels": [0.0, 0.01, 0.025, 0.05]},
+    {"name": "choice_order", "levels": ["original", "shuffled"]},
+    {"name": "decoding", "levels": ["greedy", "T=0.7", "T=1.0"]},
+    {"name": "quantization", "levels": ["bf16", "fp8"]}
+  ]
+}
