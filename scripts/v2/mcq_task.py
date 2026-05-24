@@ -4,9 +4,13 @@ Applies all 6 perturbation axes to any MCQ eval task. Decoding (temperature)
 and quantization are handled by the runner and deployment profile respectively;
 the task handles prompt_template, system_prompt, n_shot_frac, and choice_order.
 
+Supports two modes:
+  1. Registry-based: base_task=inspect_evals/wmdp_bio (loads full dataset from HF)
+  2. Subset file: subset_file=data/v2/wmdp_bio/subset_00.json (pre-sampled items)
+
 Usage (called by run_mcq.py, not directly):
     inspect eval scripts/v2/mcq_task.py@mcq_v2 \
-        -T base_task=inspect_evals/wmdp_chem \
+        -T subset_file=data/v2/wmdp_bio/subset_00.json \
         -T prompt_template=lm-eval-default \
         -T system_prompt=none \
         -T n_shot_frac=0.0 \
@@ -15,11 +19,13 @@ Usage (called by run_mcq.py, not directly):
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from inspect_ai import Task, task
 from inspect_ai._util.registry import registry_lookup
-from inspect_ai.dataset import MemoryDataset
+from inspect_ai.dataset import MemoryDataset, Sample
 from inspect_ai.scorer import choice
 from inspect_ai.solver import multiple_choice, system_message
 from nshot import (
@@ -98,22 +104,46 @@ def build_solver_chain(
     return solvers
 
 
+def _load_subset_samples(subset_file: str) -> list[Sample]:
+    """Load pre-sampled items from a subset JSON file."""
+    data = json.loads(Path(subset_file).read_text())
+    samples = []
+    for item in data["items"]:
+        choices_list = item["choices"]
+        target = chr(ord("A") + item["answer"])
+        samples.append(
+            Sample(
+                id=item["id"],
+                input=item["question"],
+                choices=choices_list,
+                target=target,
+            )
+        )
+    return samples
+
+
 @task
 def mcq_v2(
-    base_task: str = "inspect_evals/wmdp_chem",
+    base_task: str = "",
+    subset_file: str = "",
     prompt_template: str = "lm-eval-default",
     system_prompt: str = "none",
     n_shot_frac: str = "0.0",
     shuffle: str = "false",
 ) -> Task:
     """v2 MCQ perturbation wrapper."""
-    base_fn = registry_lookup("task", base_task)
-    base = base_fn()  # type: ignore[operator]
+    if subset_file:
+        all_samples = _load_subset_samples(subset_file)
+    elif base_task:
+        base_fn = registry_lookup("task", base_task)
+        base = base_fn()  # type: ignore[operator]
+        all_samples = list(base.dataset)
+    else:
+        msg = "Must provide either subset_file or base_task"
+        raise ValueError(msg)
 
     frac = float(n_shot_frac)
     do_shuffle = shuffle.lower() in ("true", "1", "yes")
-
-    all_samples = list(base.dataset)
 
     pool = draw_exemplar_pool(all_samples, max_frac=max(N_SHOT_FRACS))
     pool_ids = {s.id for s in pool}

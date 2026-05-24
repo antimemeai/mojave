@@ -97,6 +97,7 @@ def build_inspect_cmd(
     output_dir: Path,
     model: str,
     limit: int | None,
+    subset_file: str | None = None,
 ) -> list[str]:
     cell_id = str(cell["cell_id"])
     decoding = DECODING_MAP[str(cell["decoding"])]
@@ -110,21 +111,29 @@ def build_inspect_cmd(
         f"openai/{model}",
         "--model-base-url",
         base_url,
-        "-T",
-        f"base_task={base_task}",
-        "-T",
-        f"prompt_template={cell['prompt_template']}",
-        "-T",
-        f"system_prompt={cell['system_prompt']}",
-        "-T",
-        f"n_shot_frac={cell['n_shot_frac']}",
-        "-T",
-        f"shuffle={shuffle}",
-        "--temperature",
-        str(decoding["temperature"]),
-        "--log-dir",
-        str(output_dir / cell_id),
     ]
+
+    if subset_file:
+        cmd.extend(["-T", f"subset_file={subset_file}"])
+    else:
+        cmd.extend(["-T", f"base_task={base_task}"])
+
+    cmd.extend(
+        [
+            "-T",
+            f"prompt_template={cell['prompt_template']}",
+            "-T",
+            f"system_prompt={cell['system_prompt']}",
+            "-T",
+            f"n_shot_frac={cell['n_shot_frac']}",
+            "-T",
+            f"shuffle={shuffle}",
+            "--temperature",
+            str(decoding["temperature"]),
+            "--log-dir",
+            str(output_dir / cell_id),
+        ]
+    )
 
     if limit is not None:
         cmd.extend(["--limit", str(limit)])
@@ -143,6 +152,7 @@ def run_cell(
     limit: int | None = None,
     timeout: int = CELL_TIMEOUT,
     retries: int = MAX_RETRIES,
+    subset_file: str | None = None,
 ) -> tuple[str, bool, str]:
     cell_id = str(cell["cell_id"])
 
@@ -173,6 +183,7 @@ def run_cell(
             output_dir,
             model,
             limit,
+            subset_file=subset_file,
         )
         try:
             result = subprocess.run(
@@ -234,6 +245,12 @@ def main() -> None:
         type=Path,
         default=Path("data/destructive/endpoints.json"),
     )
+    parser.add_argument(
+        "--subset-file",
+        type=str,
+        default=None,
+        help="Path to pre-sampled item subset JSON (overrides base_task dataset)",
+    )
     args = parser.parse_args()
 
     manifest = json.loads(Path(args.manifest).read_text())
@@ -242,6 +259,7 @@ def main() -> None:
 
     base_task = manifest["task"]
     model = manifest["model"]
+    subset_file: str | None = args.subset_file
 
     endpoints = load_endpoints(args.endpoints or None, args.endpoints_file)
 
@@ -299,6 +317,7 @@ def main() -> None:
                         limit=args.limit,
                         timeout=args.timeout,
                         retries=args.retries,
+                        subset_file=subset_file,
                     )
                 )
             return results
