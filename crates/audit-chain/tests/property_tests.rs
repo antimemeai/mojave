@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use audit_chain::entry::{Action, AuditEntryBuilder, Decision, Principal};
+use audit_chain::entry::{AuditEntryBuilder, Principal};
 use audit_chain::seal::{ChainHead, SealedAuditEntry};
 use audit_chain::verify::ChainVerifier;
 use chrono::{TimeZone, Utc};
@@ -8,13 +8,15 @@ use chrono::{TimeZone, Utc};
 fn sample_entry() -> audit_chain::entry::AuditEntry {
     AuditEntryBuilder::new()
         .seq(0)
-        .actor(Principal::System {
+        .actor(Principal {
+            kind: "System".into(),
             id: "prop-test".into(),
         })
-        .action(Action::Observed)
-        .decision(Decision::Observed)
+        .event("eval.started")
+        .authorization("Allowed")
+        .outcome("Succeeded")
         .at(Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap())
-        .context(serde_json::json!({"trial": 1}))
+        .detail(serde_json::json!({"trial": 1}))
         .build()
         .unwrap()
 }

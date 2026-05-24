@@ -93,17 +93,21 @@ pub(crate) fn compute_entry_hash(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::entry::{Action, AuditEntryBuilder, Decision, Principal};
+    use crate::entry::{AuditEntryBuilder, Principal};
     use chrono::{TimeZone, Utc};
 
     fn sample_entry() -> AuditEntry {
         AuditEntryBuilder::new()
             .seq(0)
-            .actor(Principal::System { id: "test".into() })
-            .action(Action::Observed)
-            .decision(Decision::Observed)
+            .actor(Principal {
+                kind: "System".into(),
+                id: "test".into(),
+            })
+            .event("eval.started")
+            .authorization("Allowed")
+            .outcome("Succeeded")
             .at(Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap())
-            .context(serde_json::json!({"trial": 1}))
+            .detail(serde_json::json!({"trial": 1}))
             .build()
             .unwrap()
     }
@@ -162,11 +166,11 @@ mod tests {
     }
 
     #[test]
-    fn single_bit_context_change_changes_hash() {
+    fn single_bit_detail_change_changes_hash() {
         let mut e1 = sample_entry();
         let mut e2 = sample_entry();
-        e1.context = serde_json::json!({"trial": 1});
-        e2.context = serde_json::json!({"trial": 2});
+        e1.detail = serde_json::json!({"trial": 1});
+        e2.detail = serde_json::json!({"trial": 2});
         let h1 = compute_entry_hash(&e1, None).unwrap();
         let h2 = compute_entry_hash(&e2, None).unwrap();
         assert_ne!(h1, h2);

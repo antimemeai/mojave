@@ -37,17 +37,21 @@ fn hex_encode(bytes: [u8; 32]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use audit_chain::entry::{Action, AuditEntryBuilder, Decision, Principal};
+    use audit_chain::entry::{AuditEntryBuilder, Principal};
     use chrono::{TimeZone, Utc};
 
     fn sample_entry() -> audit_chain::entry::AuditEntry {
         AuditEntryBuilder::new()
             .seq(0)
-            .actor(Principal::System { id: "test".into() })
-            .action(Action::Observed)
-            .decision(Decision::Observed)
+            .actor(Principal {
+                kind: "System".into(),
+                id: "test".into(),
+            })
+            .event("eval.started")
+            .authorization("Allowed")
+            .outcome("Succeeded")
             .at(Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap())
-            .context(serde_json::json!({"trial": 1}))
+            .detail(serde_json::json!({"trial": 1}))
             .build()
             .unwrap()
     }

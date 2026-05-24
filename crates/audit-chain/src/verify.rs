@@ -116,18 +116,22 @@ impl ChainVerifier {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::entry::{Action, AuditEntryBuilder, Decision, Principal};
+    use crate::entry::{AuditEntryBuilder, Principal};
     use crate::seal::ChainHead;
     use chrono::{TimeZone, Utc};
 
     fn sample_entry() -> crate::entry::AuditEntry {
         AuditEntryBuilder::new()
             .seq(0)
-            .actor(Principal::System { id: "test".into() })
-            .action(Action::Observed)
-            .decision(Decision::Observed)
+            .actor(Principal {
+                kind: "System".into(),
+                id: "test".into(),
+            })
+            .event("eval.started")
+            .authorization("Allowed")
+            .outcome("Succeeded")
             .at(Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap())
-            .context(serde_json::json!({"trial": 1}))
+            .detail(serde_json::json!({"trial": 1}))
             .build()
             .unwrap()
     }
@@ -154,7 +158,7 @@ mod tests {
     #[test]
     fn tampered_context_detected() {
         let mut chain = build_chain(4);
-        chain[2].base.context = serde_json::json!({"tampered": true});
+        chain[2].base.detail = serde_json::json!({"tampered": true});
         let result = ChainVerifier::verify(&chain);
         assert!(!result.is_clean());
         assert!(result.has_entry_hash_mismatch_at_seq(2));
@@ -198,7 +202,7 @@ mod tests {
     #[test]
     fn multiple_findings_can_accumulate() {
         let mut chain = build_chain(4);
-        chain[1].base.context = serde_json::json!({"tampered": true});
+        chain[1].base.detail = serde_json::json!({"tampered": true});
         chain[3].base.seq = 99;
         let result = ChainVerifier::verify(&chain);
         assert!(!result.is_clean());

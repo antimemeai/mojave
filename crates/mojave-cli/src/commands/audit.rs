@@ -1,7 +1,7 @@
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-use audit_chain::entry::{Action, AuditEntryBuilder, Decision, Principal, ResourceRef};
+use audit_chain::entry::{AuditEntryBuilder, Principal, ResourceRef};
 use audit_chain::seal::{ChainHead, SealedAuditEntry};
 use audit_sign::signing::{AuditSigner, KeyRef, LocalEd25519Signer, SignerKeyId};
 use audit_sign::snapshot::ChainHeadSnapshot;
@@ -145,24 +145,20 @@ pub fn run_seal(key_file: Option<&Path>) -> Result<(), CliError> {
 
     let mut head = load_chain_head(&audit_dir)?;
 
-    let actor = match input.actor.kind.as_str() {
-        "System" => Principal::System {
-            id: input.actor.id.clone(),
-        },
-        _ => Principal::Actor {
-            id: input.actor.id.clone(),
-            role: input.actor.kind.clone(),
-        },
+    let actor = Principal {
+        kind: input.actor.kind.clone(),
+        id: input.actor.id.clone(),
     };
 
     let entry = AuditEntryBuilder::new()
         .seq(0)
         .actor(actor)
-        .action(Action::Custom("run_card_generated".into()))
+        .event("run_card.generated")
         .resource(ResourceRef::new("eval", &input.eval_name))
-        .decision(Decision::Completed)
+        .authorization("Allowed")
+        .outcome("Succeeded")
         .at(chrono::Utc::now())
-        .context(serde_json::json!({
+        .detail(serde_json::json!({
             "run_id": input.run_id,
             "eval_name": input.eval_name,
             "date_issued": input.date_issued,
