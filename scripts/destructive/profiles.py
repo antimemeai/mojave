@@ -54,6 +54,8 @@ def _build_docker_args(profile: dict) -> str:
     ]
     if profile.get("enforce_eager"):
         parts.append("--enforce-eager")
+    if profile.get("quantization"):
+        parts.append(f"--quantization {profile['quantization']}")
     return " ".join(parts)
 
 
