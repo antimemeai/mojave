@@ -103,7 +103,11 @@ def generate_borgonovo_table_latex(indices: list[dict[str, Any]]) -> str:
     return header + "\n".join(rows) + "\n" + footer
 
 
-def generate_config(analysis: dict[str, Any], analysis_path: Path) -> str:
+def generate_config(
+    analysis: dict[str, Any],
+    analysis_path: Path,
+    confseq: dict[str, Any] | None = None,
+) -> str:
     agg = analysis["aggregate"]
     design = analysis["design"]
     sobol = analysis["sobol_indices"]
@@ -220,19 +224,38 @@ def generate_config(analysis: dict[str, Any], analysis_path: Path) -> str:
     lines.append(r"\rcset{spearman.disc.hi}  {}")
     lines.append("")
 
-    for key in [
-        "sprt.method",
-        "sprt.beta",
-        "sprt.alpha",
-        "sprt.nperm",
-        "sprt.median.stop",
-        "sprt.iqr.lo",
-        "sprt.iqr.hi",
-        "sprt.frac.q4",
-        "sprt.frac.half",
-        "sprt.frac.full",
-    ]:
-        lines.append(rf"\rcset{{{key}}}        {{}}")
+    if confseq:
+        cs_agg = confseq["aggregate"]
+        lines.append(rf"\rcset{{sprt.method}}    {{{confseq['method']}}}")
+        lines.append(
+            rf"\rcset{{sprt.beta}}      "
+            rf"{{{fmt(confseq['half_width_threshold'])}}}"
+        )
+        lines.append(rf"\rcset{{sprt.alpha}}     {{{fmt(confseq['alpha'])}}}")
+        lines.append(rf"\rcset{{sprt.nperm}}     {{{confseq['n_permutations']}}}")
+        lines.append(
+            rf"\rcset{{sprt.median.stop}}"
+            rf"  {{{fmt(cs_agg['median_stopping_n'], 0)}}}"
+        )
+        lines.append(rf"\rcset{{sprt.iqr.lo}}    {{{fmt(cs_agg['iqr_low'], 0)}}}")
+        lines.append(rf"\rcset{{sprt.iqr.hi}}    {{{fmt(cs_agg['iqr_high'], 0)}}}")
+        lines.append(rf"\rcset{{sprt.frac.q4}}   {{{fmt(cs_agg['frac_stopped_q4'])}}}")
+        lines.append(rf"\rcset{{sprt.frac.half}} {{{fmt(cs_agg['frac_stopped_half'])}}}")
+        lines.append(rf"\rcset{{sprt.frac.full}} {{{fmt(cs_agg['frac_stopped_full'])}}}")
+    else:
+        for key in [
+            "sprt.method",
+            "sprt.beta",
+            "sprt.alpha",
+            "sprt.nperm",
+            "sprt.median.stop",
+            "sprt.iqr.lo",
+            "sprt.iqr.hi",
+            "sprt.frac.q4",
+            "sprt.frac.half",
+            "sprt.frac.full",
+        ]:
+            lines.append(rf"\rcset{{{key}}}        {{}}")
     lines.append("")
 
     name_escaped = eval_name.replace("_", r"\_")
@@ -278,15 +301,24 @@ def main() -> None:
         type=Path,
         default=Path("data/run-cards-v2"),
     )
+    parser.add_argument(
+        "--confseq",
+        type=Path,
+        default=None,
+        help="Confseq stopping analysis JSON",
+    )
     args = parser.parse_args()
 
     analysis: dict[str, Any] = json.loads(args.analysis.read_text())
+    confseq_data: dict[str, Any] | None = None
+    if args.confseq:
+        confseq_data = json.loads(args.confseq.read_text())
     eval_name = analysis["eval"]
 
     out_dir = args.output_dir / eval_name.replace("_", "-")
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    config_content = generate_config(analysis, args.analysis)
+    config_content = generate_config(analysis, args.analysis, confseq=confseq_data)
     config_path = out_dir / "runcard-config.tex"
     config_path.write_text(config_content)
     print(f"  {config_path}")

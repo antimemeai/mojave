@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 mod analyze;
+mod confseq;
 mod manifest;
 
 use std::path::PathBuf;
@@ -36,6 +37,27 @@ enum Command {
 
         #[arg(long, default_value = "mojave-gsa-default-seed-v1")]
         seed: String,
+
+        #[arg(long, short)]
+        output: PathBuf,
+    },
+
+    /// Run retrospective confseq CI-width stopping analysis on per-cell results.
+    Confseq {
+        #[arg(long)]
+        results: PathBuf,
+
+        #[arg(long, default_value = "0.02")]
+        half_width_threshold: f64,
+
+        #[arg(long, default_value = "0.05")]
+        alpha: f64,
+
+        #[arg(long, default_value = "1000")]
+        n_permutations: usize,
+
+        #[arg(long, default_value = "42")]
+        seed: u64,
 
         #[arg(long, short)]
         output: PathBuf,
@@ -85,6 +107,23 @@ fn main() -> Result<()> {
         } => {
             let seed_bytes = seed_to_bytes(&seed);
             manifest::generate_manifest(&axes_config, &task, &model, n_base, seed_bytes, &output)?;
+        }
+        Command::Confseq {
+            results,
+            half_width_threshold,
+            alpha,
+            n_permutations,
+            seed,
+            output,
+        } => {
+            confseq::confseq_analyze(
+                &results,
+                half_width_threshold,
+                alpha,
+                n_permutations,
+                seed,
+                &output,
+            )?;
         }
         Command::Analyze {
             manifest,
