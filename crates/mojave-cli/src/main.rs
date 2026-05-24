@@ -95,6 +95,18 @@ enum AuditAction {
         #[arg(long)]
         chain: Option<std::path::PathBuf>,
     },
+    /// Emit an audit event (reads JSON from stdin)
+    Emit {
+        #[arg(long)]
+        blob_file: Option<std::path::PathBuf>,
+        #[arg(long)]
+        audit_dir: Option<std::path::PathBuf>,
+    },
+    /// Garbage-collect orphan blobs
+    Gc {
+        #[arg(long)]
+        audit_dir: Option<std::path::PathBuf>,
+    },
 }
 
 fn main() {
@@ -215,6 +227,30 @@ fn main() {
             }
             AuditAction::Verify { chain } => {
                 match mojave_cli::commands::audit::run_verify(chain.as_deref()) {
+                    Ok(()) => Ok(()),
+                    Err(e) => {
+                        write_error(&e);
+                        std::process::exit(1);
+                    }
+                }
+            }
+            AuditAction::Emit {
+                blob_file,
+                audit_dir,
+            } => {
+                match mojave_cli::commands::audit::run_emit(
+                    blob_file.as_deref(),
+                    audit_dir.as_deref(),
+                ) {
+                    Ok(()) => Ok(()),
+                    Err(e) => {
+                        write_error(&e);
+                        std::process::exit(1);
+                    }
+                }
+            }
+            AuditAction::Gc { audit_dir } => {
+                match mojave_cli::commands::audit::run_gc(audit_dir.as_deref()) {
                     Ok(()) => Ok(()),
                     Err(e) => {
                         write_error(&e);

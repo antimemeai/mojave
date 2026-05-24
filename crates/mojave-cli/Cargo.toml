@@ -20,6 +20,9 @@ path = "src/lib.rs"
 
 [dependencies]
 audit-chain = { path = "../audit-chain" }
+audit-emit = { path = "../audit-emit" }
+audit-events = { path = "../audit-events" }
+audit-recover = { path = "../audit-recover" }
 audit-sign = { path = "../audit-sign" }
 eval-ingest = { path = "../eval-ingest" }
 eval-orchestrator = { path = "../eval-orchestrator" }

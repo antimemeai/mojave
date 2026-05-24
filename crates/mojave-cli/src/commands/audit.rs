@@ -244,6 +244,62 @@ fn resolve_signer(key_file: Option<&Path>) -> Result<Option<LocalEd25519Signer>,
     Ok(None)
 }
 
+pub fn run_emit(blob_file: Option<&Path>, audit_dir: Option<&Path>) -> Result<(), CliError> {
+    let audit_path = audit_dir.unwrap_or(Path::new("data/audit"));
+
+    let mut stdin_buf = String::new();
+    std::io::stdin()
+        .read_to_string(&mut stdin_buf)
+        .map_err(|e| CliError::Audit(format!("cannot read stdin: {e}")))?;
+
+    let event: audit_events::AuditEvent = serde_json::from_str(&stdin_buf)
+        .map_err(|e| CliError::Audit(format!("invalid event JSON: {e}")))?;
+
+    let mut emitter = audit_emit::emitter::Emitter::open(audit_path)
+        .map_err(|e| CliError::Audit(format!("cannot open emitter: {e}")))?;
+
+    let sealed = if let Some(blob_path) = blob_file {
+        let blob_data = std::fs::read(blob_path)
+            .map_err(|e| CliError::Audit(format!("cannot read blob file: {e}")))?;
+        emitter
+            .emit_with_blob(event, &blob_data, "application/octet-stream")
+            .map_err(|e| CliError::Audit(format!("emit failed: {e}")))?
+    } else {
+        emitter
+            .emit(event)
+            .map_err(|e| CliError::Audit(format!("emit failed: {e}")))?
+    };
+
+    let output = serde_json::json!({
+        "seq": sealed.base.seq,
+        "entry_hash": hex_encode(&sealed.entry_hash),
+        "event": sealed.base.event,
+    });
+
+    let json = serde_json::to_string_pretty(&output)
+        .map_err(|e| CliError::Audit(format!("cannot serialize output: {e}")))?;
+    println!("{json}");
+    Ok(())
+}
+
+pub fn run_gc(audit_dir: Option<&Path>) -> Result<(), CliError> {
+    let audit_path = audit_dir.unwrap_or(Path::new("data/audit"));
+
+    let result = audit_recover::gc::gc_blobs(audit_path)
+        .map_err(|e| CliError::Audit(format!("GC failed: {e}")))?;
+
+    let output = serde_json::json!({
+        "blobs_scanned": result.blobs_scanned,
+        "blobs_referenced": result.blobs_referenced,
+        "blobs_deleted": result.blobs_deleted,
+    });
+
+    let json = serde_json::to_string_pretty(&output)
+        .map_err(|e| CliError::Audit(format!("cannot serialize output: {e}")))?;
+    println!("{json}");
+    Ok(())
+}
+
 pub fn run_verify(chain_path: Option<&Path>) -> Result<(), CliError> {
     let chain_file = chain_path.unwrap_or(Path::new("data/audit/chain.jsonl"));
     if !chain_file.exists() {
