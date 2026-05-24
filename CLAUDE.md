@@ -57,6 +57,24 @@ Extreme rigor baseline. No shortcuts.
 - Python: scripting/orchestration layer, torch_measure integration
 - Clean API boundaries between layers — no coupling nightmares
 
+## salib-rs — our GSA library (NON-NEGOTIABLE)
+
+**We own salib-rs** (published on crates.io as `salib` 0.1.1). It is a strict superset
+of Python SALib. We do NOT use Python SALib (Herman et al.) for anything — not sampling,
+not estimation, not analysis. Source lives at `../salib/`.
+
+If salib-rs is missing a feature, we build it. If it has a bug, we fix it. If a third-party
+library does something we need, we implement it ourselves in salib-rs and make ours better.
+
+Crate surface: `salib-core` (Problem, RngState, bit-deterministic reductions),
+`salib-samplers` (Saltelli, LHS, Sobol' QMC, Morris, FAST), `salib-estimators`
+(Saltelli2010, Jansen, Janon, Owen, Borgonovo, PAWN, DGSM, ANOVA, G-theory, regression,
+given-data Sobol', bootstrap CIs), `salib-shapley`, `salib-surrogate` (PCE),
+`salib-validation` (Ishigami, Sobol' G with closed-form indices).
+
+Python orchestration scripts call salib-rs via Rust binaries (subprocess), same pattern
+as `mojave audit`. Never `from SALib import` anything.
+
 ## Eval infrastructure (RunPod + vLLM)
 
 Eval runs use throwaway RunPod GPU pods serving Qwen2.5-7B-Instruct via vLLM.
