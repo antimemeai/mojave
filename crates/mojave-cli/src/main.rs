@@ -76,6 +76,25 @@ enum Commands {
         #[arg(value_enum)]
         shell: Shell,
     },
+    /// Audit chain management — seal entries and verify chains
+    Audit {
+        #[command(subcommand)]
+        action: AuditAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum AuditAction {
+    /// Seal a new audit entry from pipeline data (reads JSON from stdin)
+    Seal {
+        #[arg(long)]
+        key_file: Option<std::path::PathBuf>,
+    },
+    /// Verify an existing audit chain
+    Verify {
+        #[arg(long)]
+        chain: Option<std::path::PathBuf>,
+    },
 }
 
 fn main() {
@@ -184,6 +203,26 @@ fn main() {
             clap_complete::generate(shell, &mut Cli::command(), "mojave", &mut std::io::stdout());
             Ok(())
         }
+        Commands::Audit { action } => match action {
+            AuditAction::Seal { key_file } => {
+                match mojave_cli::commands::audit::run_seal(key_file.as_deref()) {
+                    Ok(()) => Ok(()),
+                    Err(e) => {
+                        write_error(&e);
+                        std::process::exit(1);
+                    }
+                }
+            }
+            AuditAction::Verify { chain } => {
+                match mojave_cli::commands::audit::run_verify(chain.as_deref()) {
+                    Ok(()) => Ok(()),
+                    Err(e) => {
+                        write_error(&e);
+                        std::process::exit(1);
+                    }
+                }
+            }
+        },
     };
 
     if let Err(e) = result {

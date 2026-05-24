@@ -19,9 +19,14 @@ path = "src/main.rs"
 path = "src/lib.rs"
 
 [dependencies]
+audit-chain = { path = "../audit-chain" }
+audit-sign = { path = "../audit-sign" }
 eval-ingest = { path = "../eval-ingest" }
 eval-orchestrator = { path = "../eval-orchestrator" }
 eval-core = { path = "../eval-core" }
+base64 = "0.22"
+chrono = { version = "0.4", features = ["serde"] }
+sha2 = "0.10"
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
 serde = { version = "1", features = ["derive"] }

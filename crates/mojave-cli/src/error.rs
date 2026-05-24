@@ -7,6 +7,7 @@ pub enum CliError {
     Config(ConfigError),
     Io(std::io::Error),
     Usage(String),
+    Audit(String),
 }
 
 #[derive(Debug)]
@@ -23,6 +24,7 @@ impl fmt::Display for CliError {
             CliError::Config(e) => write!(f, "{e}"),
             CliError::Io(e) => write!(f, "{e}"),
             CliError::Usage(msg) => write!(f, "{msg}"),
+            CliError::Audit(e) => write!(f, "{e}"),
         }
     }
 }
@@ -71,6 +73,7 @@ impl CliError {
             CliError::Config(_) => "config_error",
             CliError::Io(_) => "io_error",
             CliError::Usage(_) => "usage_error",
+            CliError::Audit(_) => "audit_error",
         }
     }
 }

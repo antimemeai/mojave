@@ -204,4 +204,14 @@ mod tests {
         assert!(!result.is_clean());
         assert!(result.findings().len() >= 2);
     }
+
+    #[test]
+    fn genesis_with_sentinel_verifies_clean() {
+        let chain = build_chain(1);
+        assert!(chain[0].parent_hash.is_none());
+        let result = ChainVerifier::verify(&chain);
+        assert!(result.is_clean());
+        let recomputed = ChainVerifier::recompute_entry_hash(&chain[0]).unwrap();
+        assert_eq!(recomputed, chain[0].entry_hash);
+    }
 }

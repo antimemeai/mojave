@@ -75,16 +75,18 @@ impl Default for ChainHead {
     }
 }
 
+const DOMAIN_TAG: &[u8] = b"mojave-audit-v1\x00";
+const GENESIS_SENTINEL: [u8; 32] = [0u8; 32];
+
 pub(crate) fn compute_entry_hash(
     base: &AuditEntry,
     parent_hash: Option<[u8; 32]>,
 ) -> Result<[u8; 32], CanonicalEncodingError> {
     let canonical = canonical::encode(base)?;
     let mut hasher = Sha256::new();
+    hasher.update(DOMAIN_TAG);
     hasher.update(&canonical);
-    if let Some(ph) = parent_hash {
-        hasher.update(ph);
-    }
+    hasher.update(parent_hash.unwrap_or(GENESIS_SENTINEL));
     Ok(hasher.finalize().into())
 }
 
@@ -154,9 +156,9 @@ mod tests {
     #[test]
     fn different_parent_hash_changes_entry_hash() {
         let entry = sample_entry();
-        let h_none = compute_entry_hash(&entry, None).unwrap();
-        let h_some = compute_entry_hash(&entry, Some([0u8; 32])).unwrap();
-        assert_ne!(h_none, h_some);
+        let h_genesis = compute_entry_hash(&entry, None).unwrap();
+        let h_chained = compute_entry_hash(&entry, Some([1u8; 32])).unwrap();
+        assert_ne!(h_genesis, h_chained);
     }
 
     #[test]
@@ -193,5 +195,19 @@ mod tests {
         assert!(head.last_entry_hash().is_none());
         head.link(sample_entry()).unwrap();
         assert!(head.last_entry_hash().is_some());
+    }
+
+    #[test]
+    fn domain_tag_is_included_in_hash() {
+        let entry = sample_entry();
+        let hash = compute_entry_hash(&entry, None).unwrap();
+        use sha2::{Digest, Sha256};
+        let canonical = crate::canonical::encode(&entry).unwrap();
+        let mut hasher = Sha256::new();
+        hasher.update(b"mojave-audit-v1\x00");
+        hasher.update(&canonical);
+        hasher.update([0u8; 32]);
+        let expected: [u8; 32] = hasher.finalize().into();
+        assert_eq!(hash, expected);
     }
 }

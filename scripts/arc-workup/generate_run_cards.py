@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import subprocess
 from pathlib import Path
 
 SUMMARY_PATH = Path("data/analysis/full_summary.json")
@@ -56,6 +57,46 @@ EVAL_META = {
         "id_suffix": "GSM8K",
     },
 }
+
+
+def compute_file_sha256(path: Path) -> str:
+    """Compute full SHA-256 hex digest of a file."""
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(8192), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def audit_seal(run_id: str, eval_name: str, data_file: Path) -> dict | None:
+    """Call mojave audit seal and return the output, or None if mojave is not available."""
+    data_sha256 = compute_file_sha256(data_file)
+    seal_input = {
+        "run_id": run_id,
+        "eval_name": eval_name,
+        "date_issued": "2026-05-19",
+        "data_file": str(data_file),
+        "data_sha256": data_sha256,
+        "actor": {"kind": "System", "id": "generate_run_cards.py"},
+    }
+    try:
+        result = subprocess.run(
+            ["mojave", "audit", "seal"],
+            input=json.dumps(seal_input),
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if result.returncode != 0:
+            print(f"  WARN: mojave audit seal failed: {result.stderr.strip()}")
+            return None
+        return json.loads(result.stdout)
+    except FileNotFoundError:
+        print("  WARN: mojave binary not found, skipping audit seal")
+        return None
+    except subprocess.TimeoutExpired:
+        print("  WARN: mojave audit seal timed out")
+        return None
 
 
 def fmt(v: float, decimals: int = 4) -> str:
@@ -107,14 +148,16 @@ def generate_config(name: str, data: dict) -> str:
     lines.append(rf"\rcset{{n.items}}           {{{data['n_items']}}}")
     lines.append(rf"\rcset{{n.variants}}        {{{data['n_variants']}}}")
     lines.append(
-        rf"\rcset{{perturb.design}}    {{Fully crossed block design: "
-        rf"36 option-order seeds $\times$ 4 temperatures "
-        rf"({temp_list}) + 1 deterministic baseline ($T{{=}}0$). "
+        rf"\rcset{{perturb.design}}    {{Destructive perturbation workup: "
+        rf"5 prompt templates $\times$ 5 system prompts $\times$ "
+        rf"4 few-shot levels $\times$ 5 label formats $\times$ "
+        rf"4 temperatures ({temp_list}) + 1 deterministic baseline ($T{{=}}0$). "
         rf"{data['n_variants']} variants per item.}}"
     )
     lines.append(
         rf"\rcset{{inference.config}}  {{Per-variant: temperature $\in\{{{temp_list}\}}$; "
-        rf"option-order seed $\in$ 36 pseudo-random seeds; "
+        rf"prompt template $\in$ 5 styles; system prompt $\in$ 5 styles; "
+        rf"few-shot $\in \{{0,1,3,5\}}$; label format $\in$ 5 styles; "
         rf"top\_p $=1.0$; greedy decode at $T{{=}}0$.}}"
     )
     lines.append("")
@@ -207,14 +250,24 @@ def generate_config(name: str, data: dict) -> str:
         rf"\rcset{{companion.file}}    {{\texttt{{data/analysis/{name_escaped}\_analysis.json}}}}"
     )
 
-    data_json = json.dumps(data, sort_keys=True)
-    data_hash = hashlib.sha256(data_json.encode()).hexdigest()[:16]
+    data_file = Path(f"data/analysis/{name}_analysis.json")
+    if data_file.exists():
+        data_hash = compute_file_sha256(data_file)
+    else:
+        data_json = json.dumps(data, sort_keys=True)
+        data_hash = hashlib.sha256(data_json.encode()).hexdigest()
     lines.append(rf"\rcset{{companion.hash}}    {{\texttt{{sha256:{data_hash}}}}}")
     lines.append(
         r"\rcset{companion.contents}{Per-variant accuracy, per-item response matrix, "
         r"perturbation stability analysis, sequential stopping results, "
         r"and the variant manifest.}"
     )
+    lines.append("")
+
+    lines.append(r"% ---------------------------------------------------------- AUDIT TRAIL ----")
+    lines.append(r"\rcset{audit.chain.tip}   {}")
+    lines.append(r"\rcset{audit.chain.seq}   {}")
+    lines.append(r"\rcset{audit.signed}      {}")
     lines.append("")
 
     lines.append(r"% ---------------------------------------------------------- DISCLAIMERS ----")
@@ -268,10 +321,10 @@ def generate_cross_eval_config(summary: dict) -> str:
     lines.append(r"\rcset{model.serving}     {vLLM 0.8.5.post1, L4 24GB, max\_tokens=4096}")
     lines.append(rf"\rcset{{n.evals}}          {{{len(evals)}}}")
     lines.append(
-        r"\rcset{eval.selection}    {6 benchmarks from UK AISI Inspect Evals: "
+        r"\rcset{eval.selection}    {5 benchmarks from UK AISI Inspect Evals: "
         r"ARC Challenge, CyberMetric-2000, HellaSwag, MMLU (0-shot), "
-        r"TruthfulQA, GSM8K. Selected to span accuracy levels and "
-        r"metrological quality tiers.}"
+        r"TruthfulQA. Selected to span accuracy levels and "
+        r"metrological quality tiers. GSM8K excluded (run failed).}"
     )
     lines.append(r"\rcset{evaluator.org}     {antimeme.ai}")
     lines.append(r"\rcset{evaluator.tool}    {UK AISI Inspect AI}")
@@ -279,15 +332,17 @@ def generate_cross_eval_config(summary: dict) -> str:
 
     lines.append(r"% -------------------------------------------------- PERTURBATION DESIGN ----")
     lines.append(
-        r"\rcset{perturb.design}    {Fully crossed: 36 option-order seeds "
-        r"$\times$ 4 temperatures (0.3, 0.5, 0.7, 1.0) + 1 deterministic "
-        r"baseline ($T{=}0$). 145 variants per item per eval "
-        r"(ARC: 178 variants with extended temperature range).}"
+        r"\rcset{perturb.design}    {Destructive perturbation workup: "
+        r"5 prompt templates $\times$ 5 system prompts $\times$ "
+        r"4 few-shot levels $\times$ 5 label formats $\times$ "
+        r"4 temperatures (0.3, 0.7, 1.0) + 1 deterministic "
+        r"baseline ($T{=}0$). 106 variants per item per eval.}"
     )
     lines.append(
         r"\rcset{inference.config}  {Per-variant: temperature "
-        r"$\in\{0.0, 0.3, 0.5, 0.7, 1.0\}$; option-order seed "
-        r"$\in$ 36 pseudo-random seeds; top\_p $=1.0$; greedy at $T{=}0$.}"
+        r"$\in\{0.0, 0.3, 0.7, 1.0\}$; prompt template $\in$ 5 styles; "
+        r"system prompt $\in$ 5 styles; few-shot $\in \{0,1,3,5\}$; "
+        r"label format $\in$ 5 styles; top\_p $=1.0$; greedy at $T{=}0$.}"
     )
     obs_str = f"{total_obs:,}".replace(",", "{,}")
     lines.append(rf"\rcset{{n.total.obs}}      {{{obs_str}}}")
@@ -379,8 +434,12 @@ def generate_cross_eval_config(summary: dict) -> str:
 
     lines.append(r"% ----------------------------------------------- RAW DATA REFERENCE ----")
     lines.append(r"\rcset{companion.file}    {\texttt{data/analysis/full\_summary.json}}")
-    summary_json = json.dumps(summary, sort_keys=True)
-    summary_hash = hashlib.sha256(summary_json.encode()).hexdigest()[:16]
+    summary_file = SUMMARY_PATH
+    if summary_file.exists():
+        summary_hash = compute_file_sha256(summary_file)
+    else:
+        summary_json = json.dumps(summary, sort_keys=True)
+        summary_hash = hashlib.sha256(summary_json.encode()).hexdigest()
     lines.append(rf"\rcset{{companion.hash}}    {{\texttt{{sha256:{summary_hash}}}}}")
     lines.append(
         r"\rcset{companion.contents}{Per-eval analysis summaries, "
@@ -428,6 +487,36 @@ def main() -> None:
         config_path = out_dir / "runcard-config.tex"
         config_path.write_text(config_content)
         print(f"  {config_path}")
+
+        # Audit seal
+        data_file = Path(f"data/analysis/{name}_analysis.json")
+        if data_file.exists():
+            seal_result = audit_seal(
+                run_id=f"MOJAVE-2026-0519-{EVAL_META[name]['id_suffix']}",
+                eval_name=name,
+                data_file=data_file,
+            )
+            if seal_result:
+                config_lines = config_content.rstrip().split("\n")
+                patched = []
+                for line in config_lines:
+                    if r"\rcset{audit.chain.tip}" in line:
+                        tip = seal_result["chain_tip_hash"]
+                        line = rf"\rcset{{audit.chain.tip}}   {{\texttt{{{tip}}}}}"
+                    elif r"\rcset{audit.chain.seq}" in line:
+                        line = rf"\rcset{{audit.chain.seq}}   {{{seal_result['chain_tip_seq']}}}"
+                    elif r"\rcset{audit.signed}" in line:
+                        if seal_result.get("attestation_cbor_b64"):
+                            line = r"\rcset{audit.signed}      {Yes --- Ed25519 COSE\_Sign1}"
+                        else:
+                            line = r"\rcset{audit.signed}      {No --- chain only (unsigned)}"
+                    patched.append(line)
+                config_content = "\n".join(patched) + "\n"
+                config_path.write_text(config_content)
+                print(
+                    f"    audit: seq={seal_result['chain_tip_seq']} "
+                    f"tip={seal_result['chain_tip_hash'][:16]}..."
+                )
 
         engine_src = Path("../../..") / TEMPLATE_DIR / "runcard.tex"
         engine_dst = out_dir / "runcard.tex"
