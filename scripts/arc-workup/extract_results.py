@@ -18,34 +18,29 @@ from inspect_ai.log import read_eval_log
 
 EVALS = {
     "arc_challenge": {
-        "log_dir": "data/arc-workup/logs",
-        "manifest": "scripts/arc-workup/manifest.json",
-        "output": "data/arc-workup/results.json",
+        "log_dir": "data/destructive/arc/logs",
+        "manifest": "data/destructive/arc/manifest.json",
+        "output": "data/destructive/arc/results.json",
     },
     "cybermetric_2000": {
-        "log_dir": "data/cybermetric/logs",
-        "manifest": "data/cybermetric/manifest.json",
-        "output": "data/cybermetric/results.json",
+        "log_dir": "data/destructive/cybermetric/logs",
+        "manifest": "data/destructive/cybermetric/manifest.json",
+        "output": "data/destructive/cybermetric/results.json",
     },
     "mmlu_0_shot": {
-        "log_dir": "data/mmlu/logs",
-        "manifest": "data/mmlu/manifest.json",
-        "output": "data/mmlu/results.json",
+        "log_dir": "data/destructive/mmlu/logs",
+        "manifest": "data/destructive/mmlu/manifest.json",
+        "output": "data/destructive/mmlu/results.json",
     },
     "hellaswag": {
-        "log_dir": "data/hellaswag/logs",
-        "manifest": "data/hellaswag/manifest.json",
-        "output": "data/hellaswag/results.json",
+        "log_dir": "data/destructive/hellaswag/logs",
+        "manifest": "data/destructive/hellaswag/manifest.json",
+        "output": "data/destructive/hellaswag/results.json",
     },
     "truthfulqa": {
-        "log_dir": "data/truthfulqa/logs",
-        "manifest": "data/truthfulqa/manifest.json",
-        "output": "data/truthfulqa/results.json",
-    },
-    "gsm8k": {
-        "log_dir": "data/gsm8k/logs",
-        "manifest": "data/gsm8k/manifest.json",
-        "output": "data/gsm8k/results.json",
+        "log_dir": "data/destructive/truthfulqa/logs",
+        "manifest": "data/destructive/truthfulqa/manifest.json",
+        "output": "data/destructive/truthfulqa/results.json",
     },
 }
 
