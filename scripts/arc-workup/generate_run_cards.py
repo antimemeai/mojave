@@ -56,6 +56,11 @@ EVAL_META = {
         "source": r"openai/gsm8k (500-item pseudo-random subset, seed 20260519)",
         "id_suffix": "GSM8K",
     },
+    "wmdp_chem": {
+        "display_name": "WMDP-Chem",
+        "source": r"cais/wmdp (chemistry split, 5-item smoketest subset)",
+        "id_suffix": "WMDP",
+    },
 }
 
 
@@ -294,6 +299,7 @@ EVAL_ORDER = [
     "mmlu_0_shot",
     "truthfulqa",
     "gsm8k",
+    "wmdp_chem",
 ]
 
 
