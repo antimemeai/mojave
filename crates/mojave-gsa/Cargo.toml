@@ -22,6 +22,8 @@ ndarray = "0.16"
 anyhow = "1"
 hex = "0.4"
 rand = { version = "0.9", default-features = false }
+rand_chacha = "0.9"
+seq-anytime-valid = { path = "../seq-anytime-valid" }
 
 [dev-dependencies]
 assert_cmd = "2"
