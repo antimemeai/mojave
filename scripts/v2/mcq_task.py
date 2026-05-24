@@ -143,7 +143,7 @@ def mcq_v2(
         raise ValueError(msg)
 
     frac = float(n_shot_frac)
-    do_shuffle = shuffle.lower() in ("true", "1", "yes")
+    do_shuffle = str(shuffle).lower() in ("true", "1", "yes")
 
     pool = draw_exemplar_pool(all_samples, max_frac=max(N_SHOT_FRACS))
     pool_ids = {s.id for s in pool}

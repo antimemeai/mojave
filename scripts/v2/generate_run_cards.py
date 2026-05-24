@@ -2,74 +2,91 @@
 """Generate v2 run cards with Sobol' indices from analysis data.
 
 Reads a v2 analysis JSON (from analyze_sobol.py, which calls mojave-gsa
-analyze) and creates a run card directory with runcard-config.tex + symlinks
-to the template engine.
+analyze) and a rescored JSON (from rescore_fast.py --json), then creates
+a run card directory with runcard-config.tex + symlinks to the v2 template.
 
 Usage:
-    python generate_run_cards.py <analysis.json> [--output-dir data/run-cards-v2]
+    python generate_run_cards.py <analysis.json> --rescored <rescored.json> \
+        [--output-dir data/run-cards-v2]
 """
 
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
-import subprocess
+import math
 import time
 from pathlib import Path
 from typing import Any
 
-
-def compute_file_sha256(path: Path) -> str:
-    h = hashlib.sha256()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(8192), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
-
-def audit_seal(run_id: str, eval_name: str, data_file: Path) -> dict[str, Any] | None:
-    data_sha256 = compute_file_sha256(data_file)
-    seal_input = {
-        "run_id": run_id,
-        "eval_name": eval_name,
-        "date_issued": time.strftime("%Y-%m-%d"),
-        "data_file": str(data_file),
-        "data_sha256": data_sha256,
-        "actor": {"kind": "System", "id": "generate_run_cards_v2.py"},
-    }
-    try:
-        result = subprocess.run(
-            ["mojave", "audit", "seal"],
-            input=json.dumps(seal_input),
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        if result.returncode != 0:
-            print(f"  WARN: mojave audit seal failed: {result.stderr.strip()}")
-            return None
-        return json.loads(result.stdout)  # type: ignore[no-any-return]
-    except FileNotFoundError:
-        print("  WARN: mojave binary not found, skipping audit seal")
-        return None
-    except subprocess.TimeoutExpired:
-        print("  WARN: mojave audit seal timed out")
-        return None
+from repo import audit_seal, compute_file_sha256
 
 
 def fmt(v: float, decimals: int = 4) -> str:
     return f"{v:.{decimals}f}"
 
 
+def tex_escape(s: str) -> str:
+    return s.replace("_", r"\_").replace("&", r"\&").replace("%", r"\%")
+
+
+def welch_t_test(
+    cells: list[dict[str, Any]],
+) -> dict[str, Any]:
+    bf16 = [c["rescore_acc"] for c in cells if c["quantization"] == "bf16"]
+    fp8 = [c["rescore_acc"] for c in cells if c["quantization"] == "fp8"]
+
+    n1, n2 = len(bf16), len(fp8)
+    m1 = sum(bf16) / n1
+    m2 = sum(fp8) / n2
+    s1 = math.sqrt(sum((x - m1) ** 2 for x in bf16) / (n1 - 1))
+    s2 = math.sqrt(sum((x - m2) ** 2 for x in fp8) / (n2 - 1))
+
+    se = math.sqrt(s1**2 / n1 + s2**2 / n2)
+    t_stat = (m1 - m2) / se if se > 0 else 0.0
+
+    # Welch-Satterthwaite df
+    num = (s1**2 / n1 + s2**2 / n2) ** 2
+    denom = (s1**2 / n1) ** 2 / (n1 - 1) + (s2**2 / n2) ** 2 / (n2 - 1)
+    df = num / denom if denom > 0 else n1 + n2 - 2
+
+    # two-tailed p via normal approx (good enough for df > 100)
+    z = abs(t_stat)
+    p = 2 * (1 - 0.5 * (1 + math.erf(z / math.sqrt(2))))
+
+    return {
+        "bf16_n": n1,
+        "bf16_mean": m1,
+        "bf16_sd": s1,
+        "fp8_n": n2,
+        "fp8_mean": m2,
+        "fp8_sd": s2,
+        "diff": m1 - m2,
+        "t": t_stat,
+        "df": df,
+        "p": p,
+    }
+
+
+def make_accuracy_histogram(cells: list[dict[str, Any]], n_bins: int = 20) -> str:
+    accs = [c["rescore_acc"] for c in cells]
+    bin_width = 1.0 / n_bins
+    counts = [0] * n_bins
+    for a in accs:
+        idx = min(int(a / bin_width), n_bins - 1)
+        counts[idx] += 1
+    return ",".join(str(c) for c in counts)
+
+
 def generate_sobol_table_latex(indices: list[dict[str, Any]]) -> str:
     rows = []
     for idx in indices:
+        axis = tex_escape(idx["axis"])
         rows.append(
-            rf"    {idx['axis']} & {fmt(idx['S1'])} & "
-            rf"[{fmt(idx['S1_ci_low'])}, {fmt(idx['S1_ci_high'])}] & "
+            rf"    {axis} & {fmt(idx['S1'])} & "
+            rf"[{fmt(idx['S1_ci_low'])},\,{fmt(idx['S1_ci_high'])}] & "
             rf"{fmt(idx['ST'])} & "
-            rf"[{fmt(idx['ST_ci_low'])}, {fmt(idx['ST_ci_high'])}] \\"
+            rf"[{fmt(idx['ST_ci_low'])},\,{fmt(idx['ST_ci_high'])}] \\"
         )
     header = (
         r"  \begin{tabular}{@{}l r r r r@{}}"
@@ -88,7 +105,8 @@ def generate_sobol_table_latex(indices: list[dict[str, Any]]) -> str:
 def generate_borgonovo_table_latex(indices: list[dict[str, Any]]) -> str:
     rows = []
     for idx in indices:
-        rows.append(rf"    {idx['axis']} & {fmt(idx['delta'])} \\")
+        axis = tex_escape(idx["axis"])
+        rows.append(rf"    {axis} & {fmt(idx['delta'])} \\")
     header = (
         r"  \begin{tabular}{@{}l r@{}}"
         "\n"
@@ -106,7 +124,7 @@ def generate_borgonovo_table_latex(indices: list[dict[str, Any]]) -> str:
 def generate_config(
     analysis: dict[str, Any],
     analysis_path: Path,
-    confseq: dict[str, Any] | None = None,
+    rescored: list[dict[str, Any]] | None = None,
 ) -> str:
     agg = analysis["aggregate"]
     design = analysis["design"]
@@ -116,9 +134,12 @@ def generate_config(
 
     eval_name = analysis["eval"]
     model = analysis["model"]
-    run_id = f"MOJAVE-V2-{eval_name.upper()}"
+    run_id = f"MOJAVE-V2-{eval_name.upper()}".replace("_", r"\_")
 
     dominant = sobol[0] if sobol else None
+
+    axes_list = [tex_escape(s["axis"]) for s in sobol]
+    axes_str = ", ".join(axes_list)
 
     lines: list[str] = []
     lines.append(r"% " + "=" * 76)
@@ -126,12 +147,15 @@ def generate_config(
     lines.append(r"% " + "=" * 76)
     lines.append("")
 
+    # --- Header ---
     lines.append(rf"\rcset{{run.id}}            {{{run_id}}}")
     lines.append(rf"\rcset{{date.issued}}       {{{time.strftime('%Y-%m-%d')}}}")
-    lines.append(rf"\rcset{{benchmark.name}}    {{{eval_name}}}")
+    name_escaped = tex_escape(eval_name)
+    lines.append(rf"\rcset{{benchmark.name}}    {{{name_escaped}}}")
     lines.append(r"\rcset{benchmark.version} {inspect\_evals 0.12.0}")
     lines.append(r"\rcset{benchmark.source}  {\texttt{cais/wmdp}}")
-    lines.append(rf"\rcset{{model.name}}        {{{model}}}")
+    model_escaped = tex_escape(model)
+    lines.append(rf"\rcset{{model.name}}        {{{model_escaped}}}")
     lines.append(r"\rcset{model.revision}    {\texttt{HuggingFace (default)}}")
     lines.append(r"\rcset{model.quant}       {bf16 + fp8 (perturbation axis)}")
     lines.append(r"\rcset{model.serving}     {vLLM on RunPod}")
@@ -139,45 +163,50 @@ def generate_config(
     lines.append(r"\rcset{evaluator.tool}    {UK AISI Inspect AI}")
     lines.append("")
 
-    lines.append(
-        rf"\rcset{{n.items}}           "
-        rf"{{{analysis.get('n_items', '--')}}}"
-    )
-    lines.append(rf"\rcset{{n.variants}}        {{{analysis['n_cells']}}}")
+    # --- Design ---
     lines.append(
         rf"\rcset{{perturb.design}}    {{Saltelli radial: "
         rf"$N = {design['N_base']}$, $k = {design['k']}$, "
         rf"cells $= {analysis['n_cells']}$.}}"
     )
-    lines.append("")
-
-    lines.append(rf"\rcset{{acc.overall}}       {{{fmt(agg['mean_accuracy'])}}}")
-    if agg.get("spread") is not None:
-        lines.append(
-            rf"\rcset{{wilson.lower}}      "
-            rf"{{{fmt(agg['min_accuracy'])}}}"
-        )
-        lines.append(
-            rf"\rcset{{wilson.upper}}      "
-            rf"{{{fmt(agg['max_accuracy'])}}}"
-        )
-        lines.append(rf"\rcset{{wilson.width}}      {{{fmt(agg['spread'])}}}")
-    lines.append("")
-
-    lines.append(r"% ----------------------------------------------- SOBOL' ----")
-    lines.append(r"\rcset{sobol.design}      {Saltelli radial (salib-rs 0.1.1)}")
     lines.append(rf"\rcset{{sobol.N.base}}      {{{design['N_base']}}}")
     lines.append(rf"\rcset{{sobol.k}}           {{{design['k']}}}")
     lines.append(rf"\rcset{{sobol.n.cells}}     {{{analysis['n_cells']}}}")
+    lines.append(rf"\rcset{{perturb.axes}}      {{{axes_str}}}")
+    lines.append(
+        r"\rcset{inference.config}  {Per-cell: temperature "
+        r"$\in\{0.0, 0.7, 1.0\}$; prompt template "
+        r"$\in\{$direct, cot, letter-only, repeat-stem$\}$; "
+        r"system prompt $\in\{$helpful, domain-expert, none$\}$; "
+        r"n-shot fraction $\in [0, 0.05]$; "
+        r"choice order $\in\{$original, shuffled$\}$; "
+        r"quantization $\in\{$bf16, fp8$\}$.}"
+    )
+    lines.append("")
+
+    # --- Aggregate Results ---
+    lines.append(rf"\rcset{{acc.overall}}       {{{fmt(agg['mean_accuracy'])}}}")
+    lines.append(rf"\rcset{{acc.sd}}            {{{fmt(agg['sd'])}}}")
+    lines.append(rf"\rcset{{acc.min}}           {{{fmt(agg['min_accuracy'])}}}")
+    lines.append(rf"\rcset{{acc.max}}           {{{fmt(agg['max_accuracy'])}}}")
+    lines.append(rf"\rcset{{acc.spread}}        {{{fmt(agg['spread'])}}}")
+    lines.append("")
+
+    # --- Sobol' ---
+    lines.append(r"% ----------------------------------------------- SOBOL' ----")
+    lines.append(r"\rcset{sobol.design}      {Saltelli radial (salib-rs 0.1.1)}")
     if dominant:
+        dom_axis = tex_escape(dominant["axis"])
         lines.append(
-            rf"\rcset{{sobol.dominant}}    {{{dominant['axis']} "
+            rf"\rcset{{sobol.dominant}}    {{{dom_axis} "
             rf"($S_{{T_i}} = {fmt(dominant['ST'])}$)}}"
         )
+        lines.append(rf"\rcset{{sobol.dominant.name}}{{{dom_axis}}}")
     else:
         lines.append(r"\rcset{sobol.dominant}    {--}")
-    lines.append(rf"\rcset{{sobol.sum.S1}}      {{{diag['sum_s1']}}}")
-    lines.append(rf"\rcset{{sobol.sum.ST}}      {{{diag['sum_st']}}}")
+        lines.append(r"\rcset{sobol.dominant.name}{--}")
+    lines.append(rf"\rcset{{sobol.sum.S1}}      {{{fmt(diag['sum_s1'], 3)}}}")
+    lines.append(rf"\rcset{{sobol.sum.ST}}      {{{fmt(diag['sum_st'], 3)}}}")
 
     sobol_table = generate_sobol_table_latex(sobol)
     lines.append(rf"\rcset{{sobol.table}}       {{{sobol_table}}}")
@@ -186,82 +215,43 @@ def generate_config(
     lines.append(rf"\rcset{{borgonovo.table}}   {{{borgonovo_table}}}")
     lines.append("")
 
-    for key in [
-        "irt.model",
-        "irt.diff.mean",
-        "irt.diff.sd",
-        "irt.diff.min",
-        "irt.diff.max",
-        "irt.diff.hist",
-        "irt.disc.mean",
-        "irt.disc.sd",
-        "irt.disc.min",
-        "irt.disc.max",
-        "irt.disc.hist",
-        "irt.disc.caveat",
-        "irt.floor.items",
-        "irt.ceil.items",
-        "irt.nearzero.disc",
-        "q3.summary",
-        "q3.count.gt2",
-        "q3.note",
-    ]:
-        lines.append(rf"\rcset{{{key}}}        {{}}")
-    lines.append("")
+    # --- Quantization comparison ---
+    if rescored:
+        qt = welch_t_test(rescored)
+        lines.append(r"% ------------------------------------------ QUANT COMPARISON ----")
+        lines.append(rf"\rcset{{quant.bf16.n}}      {{{qt['bf16_n']}}}")
+        lines.append(rf"\rcset{{quant.bf16.mean}}   {{{fmt(qt['bf16_mean'])}}}")
+        lines.append(rf"\rcset{{quant.bf16.sd}}     {{{fmt(qt['bf16_sd'])}}}")
+        lines.append(rf"\rcset{{quant.fp8.n}}       {{{qt['fp8_n']}}}")
+        lines.append(rf"\rcset{{quant.fp8.mean}}    {{{fmt(qt['fp8_mean'])}}}")
+        lines.append(rf"\rcset{{quant.fp8.sd}}      {{{fmt(qt['fp8_sd'])}}}")
+        lines.append(rf"\rcset{{quant.diff}}        {{{fmt(qt['diff'])}pp}}")
+        lines.append(rf"\rcset{{quant.t}}           {{{fmt(qt['t'], 3)}}}")
+        lines.append(rf"\rcset{{quant.p}}           {{{fmt(qt['p'], 4)}}}")
+        lines.append(rf"\rcset{{quant.df}}          {{{fmt(qt['df'], 1)}}}")
+        if qt["p"] < 0.05:
+            lines.append(
+                r"\rcset{quant.interp}      {Statistically significant "
+                r"at $\alpha = 0.05$.}"
+            )
+        else:
+            lines.append(
+                r"\rcset{quant.interp}      {NOT statistically significant "
+                r"at $\alpha = 0.05$. Quantization does not meaningfully "
+                r"affect accuracy under this perturbation design.}"
+            )
+        lines.append("")
 
-    lines.append(r"\rcset{stab.hist}         {}")
-    lines.append(r"\rcset{stab.stable}       {}")
-    lines.append(r"\rcset{stab.sensitive}    {}")
-    lines.append(r"\rcset{dim.order}         {}")
-    lines.append(r"\rcset{dim.temp}          {}")
-    lines.append(r"\rcset{dim.prompt}        {}")
-    lines.append(r"\rcset{dim.mixed}         {}")
-    lines.append(r"\rcset{spearman.diff.rho} {}")
-    lines.append(r"\rcset{spearman.diff.lo}  {}")
-    lines.append(r"\rcset{spearman.diff.hi}  {}")
-    lines.append(r"\rcset{spearman.disc.rho} {}")
-    lines.append(r"\rcset{spearman.disc.lo}  {}")
-    lines.append(r"\rcset{spearman.disc.hi}  {}")
-    lines.append("")
+        # accuracy histogram across all cells
+        hist = make_accuracy_histogram(rescored)
+        lines.append(rf"\rcset{{acc.hist}}          {{{hist}}}")
+        lines.append("")
 
-    if confseq:
-        cs_agg = confseq["aggregate"]
-        lines.append(rf"\rcset{{sprt.method}}    {{{confseq['method']}}}")
-        lines.append(
-            rf"\rcset{{sprt.beta}}      "
-            rf"{{{fmt(confseq['half_width_threshold'])}}}"
-        )
-        lines.append(rf"\rcset{{sprt.alpha}}     {{{fmt(confseq['alpha'])}}}")
-        lines.append(rf"\rcset{{sprt.nperm}}     {{{confseq['n_permutations']}}}")
-        lines.append(
-            rf"\rcset{{sprt.median.stop}}"
-            rf"  {{{fmt(cs_agg['median_stopping_n'], 0)}}}"
-        )
-        lines.append(rf"\rcset{{sprt.iqr.lo}}    {{{fmt(cs_agg['iqr_low'], 0)}}}")
-        lines.append(rf"\rcset{{sprt.iqr.hi}}    {{{fmt(cs_agg['iqr_high'], 0)}}}")
-        lines.append(rf"\rcset{{sprt.frac.q4}}   {{{fmt(cs_agg['frac_stopped_q4'])}}}")
-        lines.append(rf"\rcset{{sprt.frac.half}} {{{fmt(cs_agg['frac_stopped_half'])}}}")
-        lines.append(rf"\rcset{{sprt.frac.full}} {{{fmt(cs_agg['frac_stopped_full'])}}}")
-    else:
-        for key in [
-            "sprt.method",
-            "sprt.beta",
-            "sprt.alpha",
-            "sprt.nperm",
-            "sprt.median.stop",
-            "sprt.iqr.lo",
-            "sprt.iqr.hi",
-            "sprt.frac.q4",
-            "sprt.frac.half",
-            "sprt.frac.full",
-        ]:
-            lines.append(rf"\rcset{{{key}}}        {{}}")
-    lines.append("")
-
-    name_escaped = eval_name.replace("_", r"\_")
+    # --- Companion / audit ---
+    name_file_escaped = eval_name.replace("_", r"\_")
     lines.append(
         rf"\rcset{{companion.file}}    "
-        rf"{{\texttt{{data/v2/{name_escaped}\_analysis.json}}}}"
+        rf"{{\texttt{{data/v2/{name_file_escaped}\_sobol\_analysis.json}}}}"
     )
     data_hash = compute_file_sha256(analysis_path)
     mid = len(data_hash) // 2
@@ -279,16 +269,6 @@ def generate_config(
     lines.append(r"\rcset{audit.chain.tip}   {}")
     lines.append(r"\rcset{audit.chain.seq}   {}")
     lines.append(r"\rcset{audit.signed}      {}")
-    lines.append("")
-
-    lines.append(
-        r"\rcset{disc.2pl}{\textbf{IRT not fitted.} Item Response Theory "
-        r"parameters were not estimated for this run.}"
-    )
-    lines.append(
-        r"\rcset{disc.unidim}{\textbf{Single model only.} Perturbation "
-        r"stability results are model-specific.}"
-    )
 
     return "\n".join(lines) + "\n"
 
@@ -297,28 +277,28 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("analysis", type=Path, help="Sobol' analysis JSON")
     parser.add_argument(
+        "--rescored",
+        type=Path,
+        default=None,
+        help="Rescored JSON (from rescore_fast.py --json)",
+    )
+    parser.add_argument(
         "--output-dir",
         type=Path,
         default=Path("data/run-cards-v2"),
     )
-    parser.add_argument(
-        "--confseq",
-        type=Path,
-        default=None,
-        help="Confseq stopping analysis JSON",
-    )
     args = parser.parse_args()
 
     analysis: dict[str, Any] = json.loads(args.analysis.read_text())
-    confseq_data: dict[str, Any] | None = None
-    if args.confseq:
-        confseq_data = json.loads(args.confseq.read_text())
+    rescored_data: list[dict[str, Any]] | None = None
+    if args.rescored:
+        rescored_data = json.loads(args.rescored.read_text())
     eval_name = analysis["eval"]
 
     out_dir = args.output_dir / eval_name.replace("_", "-")
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    config_content = generate_config(analysis, args.analysis, confseq=confseq_data)
+    config_content = generate_config(analysis, args.analysis, rescored=rescored_data)
     config_path = out_dir / "runcard-config.tex"
     config_path.write_text(config_content)
     print(f"  {config_path}")
@@ -361,8 +341,9 @@ def main() -> None:
         config_path.write_text(config_content)
         print(f"    audit: seq={seal_result['chain_tip_seq']}")
 
-    engine_src = Path("../../../templates/run-card/single-run-card/runcard.tex")
-    engine_dst = out_dir / "runcard.tex"
+    # Symlink v2 template engine
+    engine_src = Path("../../../templates/run-card/single-run-card/runcard-v2.tex")
+    engine_dst = out_dir / "runcard-v2.tex"
     if engine_dst.exists() or engine_dst.is_symlink():
         engine_dst.unlink()
     engine_dst.symlink_to(engine_src)
@@ -370,14 +351,15 @@ def main() -> None:
     makefile_path = out_dir / "Makefile"
     makefile_path.write_text(
         "TEX = pdflatex -interaction=nonstopmode -halt-on-error\n\n"
-        "runcard.pdf: runcard.tex runcard-config.tex\n"
-        "\t$(TEX) runcard.tex\n"
-        "\t$(TEX) runcard.tex\n\n"
+        "runcard.pdf: runcard-v2.tex runcard-config.tex\n"
+        "\t$(TEX) runcard-v2.tex\n"
+        "\t$(TEX) runcard-v2.tex\n"
+        "\tcp runcard-v2.pdf runcard.pdf\n\n"
         ".PHONY: clean veryclean\n"
         "clean:\n"
         "\trm -f *.aux *.log *.out *.toc\n"
         "veryclean: clean\n"
-        "\trm -f runcard.pdf\n"
+        "\trm -f runcard.pdf runcard-v2.pdf\n"
     )
 
     print(f"\n  Run card directory: {out_dir}")

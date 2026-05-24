@@ -166,11 +166,11 @@ def run_cell(
 
     detail = {
         "cell_id": cell_id,
-        "saltelli_index": cell["saltelli_index"],
+        "saltelli_index": str(cell["saltelli_index"]),
         "task": base_task,
         "model": model,
         "quantization": cell.get("quantization", "bf16"),
-        "n_shot_frac": cell.get("n_shot_frac", 0.0),
+        "n_shot_frac": str(cell.get("n_shot_frac", 0.0)),
     }
     audit("eval.started", resource_kind="eval", resource_id=cell_id, detail=detail)
 
@@ -259,7 +259,7 @@ def main() -> None:
 
     base_task = manifest["task"]
     model = manifest["model"]
-    subset_file: str | None = args.subset_file
+    subset_file: str | None = str(Path(args.subset_file).resolve()) if args.subset_file else None
 
     endpoints = load_endpoints(args.endpoints or None, args.endpoints_file)
 

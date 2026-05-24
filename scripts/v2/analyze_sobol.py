@@ -23,6 +23,8 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from repo import cargo_bin
+
 
 def reconstruct_output_vector(cells: list[dict[str, Any]]) -> list[float]:
     """Sort cells by saltelli_index and extract accuracy vector."""
@@ -150,8 +152,8 @@ def main() -> None:
     parser.add_argument("output", type=Path)
     parser.add_argument(
         "--mojave-gsa-bin",
-        default="mojave-gsa",
-        help="Path to mojave-gsa binary (default: mojave-gsa on PATH)",
+        default=cargo_bin("mojave-gsa"),
+        help="Path to mojave-gsa binary (default: auto-detected from repo)",
     )
     parser.add_argument("--bootstrap-resamples", type=int, default=1000)
     parser.add_argument("--confidence-level", type=float, default=0.95)

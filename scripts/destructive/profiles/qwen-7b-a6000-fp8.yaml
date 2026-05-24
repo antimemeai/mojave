@@ -1,0 +1,14 @@
+model: "Qwen/Qwen2.5-7B-Instruct"
+gpu_type: "NVIDIA RTX A6000"
+gpu_count: 1
+tensor_parallel_size: 1
+max_model_len: 4096
+enforce_eager: true
+vllm_use_v1: false
+gpu_memory_utilization: 0.9
+container_disk_gb: 50
+volume_gb: 50
+total_pods: 10
+batch_size: 3
+hourly_cost_per_pod: 0.33
+quantization: "fp8"
