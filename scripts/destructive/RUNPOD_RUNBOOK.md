@@ -3,33 +3,44 @@
 How to spin up cheap GPU pods for running Inspect evals with vLLM.
 Written after burning through multiple rounds of pod creation getting the config right.
 
-## TL;DR: The Right Way (2026-05-19)
+## TL;DR: The Right Way (2026-05-24)
 
-Use the `vllm/vllm-openai` Docker image. Pass model config as `docker_args`.
-No SSH. No manual setup. Pods come up serving.
+Use deployment profiles. No hardcoded models or GPUs.
 
-```python
-runpod.create_pod(
-    name=f"mojave-{i:02d}",
-    image_name="vllm/vllm-openai:latest",
-    gpu_type_id="NVIDIA GeForce RTX 3090",  # or whatever's available
-    gpu_count=1,
-    volume_in_gb=50,
-    container_disk_in_gb=50,
-    ports="8000/http",
-    cloud_type="ALL",
-    docker_args=(
-        "--model Qwen/Qwen2.5-7B-Instruct "
-        "--max-model-len 4096 "
-        "--enforce-eager "
-        "--gpu-memory-utilization 0.9 "
-        "--tensor-parallel-size 1 "
-        "--host 0.0.0.0 "
-        "--port 8000"
-    ),
-    env={"VLLM_USE_V1": "0"},
-)
+```bash
+# 1. Create pods from a profile
+python3 scripts/destructive/create_pods.py scripts/destructive/profiles/qwen-7b-3090.yaml
+
+# 2. Generate manifest for the eval you want
+python3 scripts/destructive/gen_destructive_manifest.py inspect_evals/wmdp_chem \
+    data/destructive/wmdp_chem/manifest.json
+
+# 3. Run it (endpoints auto-discovered from endpoints.json)
+python3 scripts/destructive/run_destructive.py \
+    data/destructive/wmdp_chem/manifest.json \
+    data/destructive/wmdp_chem/logs
+
+# 4. Tear down (shows cost, requires confirmation)
+python3 scripts/destructive/teardown_pods.py
 ```
+
+For 72B on H100s:
+```bash
+python3 scripts/destructive/create_pods.py scripts/destructive/profiles/qwen-72b-h100.yaml
+python3 scripts/destructive/gen_destructive_manifest.py inspect_evals/wmdp_chem \
+    data/destructive/wmdp_chem/manifest.json --model Qwen/Qwen2.5-72B-Instruct
+```
+
+## Deployment Profiles
+
+Profiles live in `scripts/destructive/profiles/`. Each YAML file specifies
+model, GPU type, pod count, cost, and vLLM flags. Create new profiles for
+new model/GPU combinations — don't edit `create_pods.py`.
+
+| Profile | Model | GPU | Pods | $/hr |
+|---------|-------|-----|------|------|
+| `qwen-7b-3090.yaml` | Qwen 2.5-7B-Instruct | RTX 3090 x1 | 8 | $0.22/pod |
+| `qwen-72b-h100.yaml` | Qwen 2.5-72B-Instruct | H100 80GB x4 | 4 | $3.89/pod |
 
 ### Why this works
 
@@ -145,13 +156,23 @@ Returns:
 ## Running evals
 
 ```bash
+# Endpoints are auto-discovered from data/destructive/endpoints.json
 python3 scripts/destructive/run_destructive.py \
-  data/destructive/arc/manifest.json \
-  data/destructive/arc/logs \
-  $(python3 -c "import json; [print(e) for e in json.load(open('data/destructive/endpoints.json'))]")
+    data/destructive/wmdp_chem/manifest.json \
+    data/destructive/wmdp_chem/logs
+
+# With options:
+python3 scripts/destructive/run_destructive.py \
+    data/destructive/wmdp_chem/manifest.json \
+    data/destructive/wmdp_chem/logs \
+    --limit 50 --timeout 1800 --retries 2
 ```
 
-Endpoints are auto-discovered from `data/destructive/endpoints.json` (written by `create_pods.py`).
+Features:
+- **Resume**: skips variants with existing `.eval` files
+- **Timeout**: kills hung variants after `--timeout` seconds (default 1800)
+- **Retry**: retries failed variants up to `--retries` times (default 2)
+- **Health check**: pings all endpoints before starting, drops unhealthy ones
 
 ## Teardown
 
@@ -159,13 +180,9 @@ Endpoints are auto-discovered from `data/destructive/endpoints.json` (written by
 python3 scripts/destructive/teardown_pods.py
 ```
 
-Or manually:
-```python
-import runpod, json
-pods = json.load(open("data/destructive/pods.json"))
-for p in pods:
-    runpod.terminate_pod(p["id"])
-```
+Shows pod count, model, cost estimate, and creation time. Requires typing
+`yes` to confirm. Use `--force` to skip confirmation (for scripted pipelines).
+Cleans up `pods.json`, `endpoints.json`, and `meta.json` after teardown.
 
 ## Credentials
 
