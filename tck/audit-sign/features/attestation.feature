@@ -1,6 +1,6 @@
 Feature: COSE_Sign1 detached attestation for audit chain tips
   Ed25519 signing and verification of chain head snapshots via COSE_Sign1
-  with detached payload (RFC 9052 §4.4).
+  with detached payload (RFC 9052 §4.2).
 
   Background:
     Given a generated Ed25519 signing key with key_id "test-key"
