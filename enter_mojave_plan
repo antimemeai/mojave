@@ -556,4 +556,73 @@ v1 found "TruthfulQA was the noisy outlier across 5 benchmarks with 28.6% of ite
 - **vLLM is not bitwise-deterministic across batch sizes or GPU types**. Greedy decoding is reproducible token-by-token only within a fixed (GPU, batch-size, vLLM-version) tuple. Document the tuple per run card. Cross-cell numeric comparisons must hold the tuple constant.
 - **NIST CAISI methodology specifics for variance/CI estimation on hazardous-capability batteries were not found in public summaries**. The CAISI DeepSeek and Kimi K2 evaluations report point estimates. **Verification step**: download the full CAISI evaluation PDFs (linked from the news pages) and locate the methodology section before citing CAISI as a methodological precedent.
 
+---
+
+## GENERALIZATION NOTE (added 2026-05-24)
+
+**What happened in v2 Phase 1 that must be generalized:**
+
+The v2 WMDP-Bio + WMDP-Chem + TruthfulQA execution built a complete
+special-case pipeline that works but is hardcoded for MCQ benchmarks on a
+single model. Every piece below was built as a one-off for this specific
+study and needs to become the general-case infrastructure for all future
+phases.
+
+### Runner (`scripts/v2/run_mcq.py`)
+- **Now:** Work-stealing queue with per-quantization endpoint pools,
+  health-check backoff, and automatic re-enqueue of failed cells.
+- **Generalize:** The work-stealing queue, health monitoring, and
+  re-enqueue logic are generic — they should work for ANY Inspect task,
+  not just MCQ. Factor out the cell dispatch loop into a reusable
+  `fleet_runner` module that takes a task factory function. MCQ, SWE-Bench,
+  AgentHarm, and judge-graded tasks all use the same dispatch pattern
+  with different task constructors.
+
+### Rescoring (`scripts/v2/rescore_fast.py`)
+- **Now:** Hardcoded MCQ letter-matching rescorer that corrects Inspect
+  scorer artifacts on specific templates (bare, letter-only).
+- **Generalize:** For judge-graded benchmarks (Arena-Hard, MT-Bench), the
+  "rescorer" becomes the multi-judge aggregation layer. The pattern is
+  the same (read .eval logs → apply corrected scoring → emit per-cell
+  JSON) but the scoring function changes. Make the rescorer pluggable.
+
+### Run Card Generation (`scripts/v2/generate_*.py`)
+- **Now:** Three generators (overall, slice, cell) with hardcoded Sobol'
+  section for variance decomposition, Welch t-test for bf16/fp8, and
+  MCQ-specific axis names.
+- **Generalize:** The three-tier card structure (overall → slice → cell)
+  is the right abstraction for any perturbation study. The generators
+  need to become template-driven: pass in the analysis JSON and a card
+  type, get the right LaTeX config. The Sobol' section works for any
+  non-judge benchmark; judge-graded benchmarks need a G-theory section
+  instead. Both should be selectable.
+
+### Analysis (`scripts/v2/analyze_sobol.py`)
+- **Now:** Transforms rescored JSON into mojave-gsa input format, calls
+  the binary, parses output. Assumes Saltelli radial design with fixed
+  axis names.
+- **Generalize:** The axis names and design parameters should come from
+  the manifest, not hardcoded. For judge-graded benchmarks, the analysis
+  step is G-theory decomposition (different binary, different output
+  schema) but the wrapper pattern is identical.
+
+### What stays specific
+- `mcq_task.py` — the Inspect task definition for MCQ. Each benchmark
+  type gets its own task file. That's fine; don't try to unify task
+  definitions across benchmark types.
+- Template axes (`prompt_template`, `system_prompt`, `decoding`, etc.) —
+  these are specific to the perturbation design. Different benchmarks
+  may have different axes (e.g., SWE-Bench has scaffold, timeout, repo
+  subset). The manifest carries the axis definitions; the runner
+  shouldn't know what they mean.
+
+### Priority order for generalization
+1. **Fleet runner** — highest leverage, eliminates requeue for all future
+   phases, not just MCQ.
+2. **Run card generators** — needed before Phase 3 (Arena-Hard) since
+   those cards need G-theory sections.
+3. **Analysis wrappers** — needed before Phase 3 for the same reason.
+4. **Rescorer** — can stay MCQ-specific until judge-graded benchmarks
+   are in scope.
+
 End of field guide.

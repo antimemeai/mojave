@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """Run v2 MCQ perturbation cells across vLLM endpoints.
 
+Work-stealing design: all pending cells go into a shared queue per
+quantization level.  One worker thread per healthy endpoint pulls cells
+from the queue as it becomes free.  Failed cells are re-enqueued (up to
+max retries) so ANY healthy endpoint can pick them up — no manual
+requeue, no stranded work on dead pods.
+
 Supports quantization-aware endpoint routing: if the endpoints file is a
 dict keyed by quantization level, cells are routed to the matching pool.
 If it's a flat list, all cells go to all endpoints (for testing).
@@ -15,10 +21,11 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import queue
 import subprocess
 import sys
+import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -26,13 +33,43 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from audit import emit as audit
 
 CELL_TIMEOUT = 1800
-MAX_RETRIES = 2
+MAX_RETRIES = 3
+HEALTH_CHECK_INTERVAL = 30
+HEALTH_BACKOFF_MAX = 120
 
 DECODING_MAP: dict[str, dict[str, float]] = {
     "greedy": {"temperature": 0.0},
     "T=0.7": {"temperature": 0.7},
     "T=1.0": {"temperature": 1.0},
 }
+
+
+class RunStats:
+    """Thread-safe counters for progress reporting."""
+
+    def __init__(self, total: int, already_done: int) -> None:
+        self._lock = threading.Lock()
+        self.total = total
+        self.completed = already_done
+        self.failed_final = 0
+        self.requeued = 0
+
+    def complete_one(self) -> int:
+        with self._lock:
+            self.completed += 1
+            return self.completed
+
+    def fail_one(self) -> None:
+        with self._lock:
+            self.failed_final += 1
+
+    def requeue_one(self) -> None:
+        with self._lock:
+            self.requeued += 1
+
+    def snapshot(self) -> tuple[int, int, int, int]:
+        with self._lock:
+            return self.total, self.completed, self.failed_final, self.requeued
 
 
 def cell_complete(output_dir: Path, cell_id: str) -> bool:
@@ -141,94 +178,161 @@ def build_inspect_cmd(
     return cmd
 
 
-def run_cell(
+def run_cell_once(
     cell: dict[str, object],
     base_task: str,
     base_url: str,
     output_dir: Path,
     model: str,
-    index: int,
-    total: int,
     limit: int | None = None,
     timeout: int = CELL_TIMEOUT,
-    retries: int = MAX_RETRIES,
     subset_file: str | None = None,
-) -> tuple[str, bool, str]:
+) -> tuple[bool, str]:
+    """Execute a single cell on a single endpoint. Returns (success, error)."""
     cell_id = str(cell["cell_id"])
 
     if cell_complete(output_dir, cell_id):
-        print(f"[{index}/{total}] {cell_id} -> SKIP (done)", file=sys.stderr)
-        return cell_id, True, ""
+        return True, ""
 
     env = os.environ.copy()
     env["OPENAI_BASE_URL"] = base_url
     env["OPENAI_API_KEY"] = "EMPTY"
 
-    detail = {
-        "cell_id": cell_id,
-        "saltelli_index": str(cell["saltelli_index"]),
-        "task": base_task,
-        "model": model,
-        "quantization": cell.get("quantization", "bf16"),
-        "n_shot_frac": str(cell.get("n_shot_frac", 0.0)),
-    }
-    audit("eval.started", resource_kind="eval", resource_id=cell_id, detail=detail)
+    cmd = build_inspect_cmd(cell, base_task, base_url, output_dir, model, limit, subset_file)
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=timeout,
+        )
+        if result.returncode == 0:
+            return True, ""
+        return False, result.stderr[:300]
+    except subprocess.TimeoutExpired:
+        return False, f"timeout after {timeout}s"
 
-    err = ""
-    for attempt in range(1, retries + 1):
-        cmd = build_inspect_cmd(
+
+def worker(
+    endpoint: str,
+    work_queue: queue.Queue[tuple[dict[str, object], int]],
+    base_task: str,
+    output_dir: Path,
+    model: str,
+    stats: RunStats,
+    limit: int | None,
+    timeout: int,
+    max_retries: int,
+    subset_file: str | None,
+) -> list[str]:
+    """Pull cells from shared queue until empty. Returns list of finally-failed cell IDs."""
+    failures: list[str] = []
+    ep_short = endpoint.split("//")[-1].split(":")[0][:20]
+    backoff = 0.0
+
+    while True:
+        try:
+            cell, attempt = work_queue.get_nowait()
+        except queue.Empty:
+            break
+
+        cell_id = str(cell["cell_id"])
+        tot, _done, _fail, _req = stats.snapshot()
+
+        if cell_complete(output_dir, cell_id):
+            n = stats.complete_one()
+            print(
+                f"[{n}/{tot}] {cell_id} -> SKIP (done) [{ep_short}]",
+                file=sys.stderr,
+            )
+            work_queue.task_done()
+            continue
+
+        if backoff > 0:
+            if not check_endpoint_health(endpoint):
+                backoff = min(backoff * 2, HEALTH_BACKOFF_MAX)
+                print(
+                    f"  [{ep_short}] unhealthy, re-enqueuing {cell_id}, backoff {backoff:.0f}s",
+                    file=sys.stderr,
+                )
+                work_queue.put((cell, attempt))
+                stats.requeue_one()
+                work_queue.task_done()
+                time.sleep(backoff)
+                continue
+            backoff = 0.0
+
+        detail = {
+            "cell_id": cell_id,
+            "saltelli_index": str(cell["saltelli_index"]),
+            "task": base_task,
+            "model": model,
+            "quantization": cell.get("quantization", "bf16"),
+            "n_shot_frac": str(cell.get("n_shot_frac", 0.0)),
+        }
+        if attempt == 1:
+            audit(
+                "eval.started",
+                resource_kind="eval",
+                resource_id=cell_id,
+                detail=detail,
+            )
+
+        ok, err = run_cell_once(
             cell,
             base_task,
-            base_url,
+            endpoint,
             output_dir,
             model,
-            limit,
+            limit=limit,
+            timeout=timeout,
             subset_file=subset_file,
         )
-        try:
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                env=env,
-                timeout=timeout,
-            )
-            if result.returncode == 0:
-                print(f"[{index}/{total}] {cell_id} -> OK", file=sys.stderr)
-                audit(
-                    "eval.completed",
-                    resource_kind="eval",
-                    resource_id=cell_id,
-                    detail=detail,
-                )
-                return cell_id, True, ""
-            err = result.stderr[:300]
+
+        if ok:
+            n = stats.complete_one()
             print(
-                f"[{index}/{total}] {cell_id} -> FAILED (attempt {attempt}/{retries}): {err}",
+                f"[{n}/{tot}] {cell_id} -> OK [{ep_short}]",
                 file=sys.stderr,
             )
-        except subprocess.TimeoutExpired:
-            err = f"timeout after {timeout}s"
+            audit(
+                "eval.completed",
+                resource_kind="eval",
+                resource_id=cell_id,
+                detail=detail,
+            )
+            backoff = 0.0
+        elif attempt < max_retries:
             print(
-                f"[{index}/{total}] {cell_id} -> TIMEOUT (attempt {attempt}/{retries})",
+                f"  {cell_id} -> FAIL attempt {attempt}/{max_retries} [{ep_short}]: {err[:80]}",
                 file=sys.stderr,
             )
+            work_queue.put((cell, attempt + 1))
+            stats.requeue_one()
+            backoff = HEALTH_CHECK_INTERVAL
+        else:
+            print(
+                f"  {cell_id} -> EXHAUSTED {max_retries} attempts [{ep_short}]",
+                file=sys.stderr,
+            )
+            audit(
+                "eval.failed",
+                resource_kind="eval",
+                resource_id=cell_id,
+                outcome="Failed",
+                detail={**detail, "error": err[:200]},
+            )
+            stats.fail_one()
+            failures.append(cell_id)
 
-        if attempt < retries:
-            time.sleep(5)
+        work_queue.task_done()
 
-    audit(
-        "eval.failed",
-        resource_kind="eval",
-        resource_id=cell_id,
-        outcome="Failed",
-        detail={**detail, "error": err[:200]},
-    )
-    return cell_id, False, err
+    return failures
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Work-stealing MCQ runner for vLLM fleet")
     parser.add_argument("manifest", help="Path to Saltelli manifest JSON")
     parser.add_argument("output_dir", help="Output directory for eval logs")
     parser.add_argument("endpoints", nargs="*", help="vLLM endpoint URLs")
@@ -273,14 +377,14 @@ def main() -> None:
         file=sys.stderr,
     )
 
-    quant_groups: dict[str, list[tuple[int, dict[str, object]]]] = {}
-    for i, cell in enumerate(cells):
+    quant_groups: dict[str, list[dict[str, object]]] = {}
+    for cell in cells:
         if cell_complete(output_dir, str(cell["cell_id"])):
             continue
         q = str(cell.get("quantization", "bf16"))
-        quant_groups.setdefault(q, []).append((i + 1, cell))
+        quant_groups.setdefault(q, []).append(cell)
 
-    failed: list[str] = []
+    all_failed: list[str] = []
 
     for quant, quant_cells in quant_groups.items():
         pool = get_endpoints_for_cell(endpoints, quant)
@@ -291,47 +395,63 @@ def main() -> None:
                 f"Skipping {len(quant_cells)} cells.",
                 file=sys.stderr,
             )
-            failed.extend(str(c["cell_id"]) for _, c in quant_cells)
+            all_failed.extend(str(c["cell_id"]) for c in quant_cells)
             continue
 
-        n_workers = len(healthy)
-        batches: list[list[tuple[int, dict[str, object], str]]] = [[] for _ in range(n_workers)]
-        for idx, (cell_num, cell) in enumerate(quant_cells):
-            ep = healthy[idx % n_workers]
-            batches[idx % n_workers].append((cell_num, cell, ep))
-
-        def run_batch(
-            batch: list[tuple[int, dict[str, object], str]],
-        ) -> list[tuple[str, bool, str]]:
-            results = []
-            for cell_num, cell, endpoint in batch:
-                results.append(
-                    run_cell(
-                        cell,
-                        base_task,
-                        endpoint,
-                        output_dir,
-                        model,
-                        cell_num,
-                        total,
-                        limit=args.limit,
-                        timeout=args.timeout,
-                        retries=args.retries,
-                        subset_file=subset_file,
-                    )
-                )
-            return results
-
-        with ThreadPoolExecutor(max_workers=n_workers) as pool_exec:
-            futures = [pool_exec.submit(run_batch, batch) for batch in batches if batch]
-            for future in as_completed(futures):
-                for cid, ok, _err in future.result():
-                    if not ok:
-                        failed.append(cid)
-
-    if failed:
         print(
-            f"\n{base_task}: {len(failed)}/{total} cells failed",
+            f"quantization={quant}: {len(quant_cells)} cells -> "
+            f"{len(healthy)} healthy endpoints (work-stealing)",
+            file=sys.stderr,
+        )
+
+        work_q: queue.Queue[tuple[dict[str, object], int]] = queue.Queue()
+        for cell in quant_cells:
+            work_q.put((cell, 1))
+
+        stats = RunStats(total, already)
+
+        threads: list[threading.Thread] = []
+        thread_results: dict[str, list[str]] = {}
+
+        def _run_worker(
+            ep: str,
+            wq: queue.Queue[tuple[dict[str, object], int]] = work_q,
+            st: RunStats = stats,
+            tr: dict[str, list[str]] = thread_results,
+        ) -> None:
+            tr[ep] = worker(
+                endpoint=ep,
+                work_queue=wq,
+                base_task=base_task,
+                output_dir=output_dir,
+                model=model,
+                stats=st,
+                limit=args.limit,
+                timeout=args.timeout,
+                max_retries=args.retries,
+                subset_file=subset_file,
+            )
+
+        for ep in healthy:
+            t = threading.Thread(target=_run_worker, args=(ep,), daemon=True)
+            threads.append(t)
+            t.start()
+
+        for t in threads:
+            t.join()
+
+        for _ep, fails in thread_results.items():
+            all_failed.extend(fails)
+
+        _, done_now, fail_now, req_now = stats.snapshot()
+        print(
+            f"quantization={quant} done: completed={done_now} failed={fail_now} requeues={req_now}",
+            file=sys.stderr,
+        )
+
+    if all_failed:
+        print(
+            f"\n{base_task}: {len(all_failed)}/{total} cells failed",
             file=sys.stderr,
         )
         sys.exit(1)
