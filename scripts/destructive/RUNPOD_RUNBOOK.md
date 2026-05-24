@@ -151,7 +151,7 @@ python3 scripts/destructive/run_destructive.py \
   $(python3 -c "import json; [print(e) for e in json.load(open('data/destructive/endpoints.json'))]")
 ```
 
-Or use `run_all_destructive.sh` which reads from `endpoints.json`.
+Endpoints are auto-discovered from `data/destructive/endpoints.json` (written by `create_pods.py`).
 
 ## Teardown
 
@@ -176,10 +176,8 @@ RunPod API key stored in `~/.runpod/` (managed by `runpod` Python SDK).
 
 | Script | Purpose |
 |--------|---------|
-| `create_pods.py` | Create pods in batches, poll until serving |
-| `setup_pods.py` | (DEPRECATED) SSH-based setup. Use vllm image instead. |
-| `teardown_pods.py` | Terminate all pods from pods.json |
-| `run_destructive.py` | Run eval variants across endpoints |
-| `run_all_destructive.sh` | Orchestrate all 6 evals end-to-end |
-| `gen_destructive_manifest.py` | Generate 106-variant manifest per eval |
+| `create_pods.py` | Create pods from a profile, poll until serving |
+| `teardown_pods.py` | Terminate all pods (with confirmation and cost estimate) |
+| `run_destructive.py` | Run eval variants across endpoints with timeout/retry |
+| `gen_destructive_manifest.py` | Generate variant manifest for a single eval task |
 | `destructive_task.py` | Inspect task wrapper for perturbation params |
