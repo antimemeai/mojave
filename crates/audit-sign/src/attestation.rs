@@ -1,12 +1,12 @@
 use chrono::Utc;
-use coset::{CborSerializable, CoseSign1, CoseSign1Builder, HeaderBuilder, Label};
+use coset::{CborSerializable, CoseSign1, CoseSign1Builder, HeaderBuilder};
 
 use crate::signing::{AuditSigner, SignerError, SigningAlgorithm};
 use crate::snapshot::ChainHeadSnapshot;
 
-const CONTENT_TYPE_LABEL: i64 = 999;
 const CONTENT_TYPE_VALUE: &str = "application/vnd.mojave.audit.chain-head+json";
-const SIGNED_AT_LABEL: i64 = 1000;
+const CWT_CLAIMS_LABEL: i64 = 15;
+const CWT_IAT_KEY: i64 = 6;
 
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
@@ -34,6 +34,10 @@ pub enum AttestationVerifyError {
     NonEmptyUnprotectedHeader,
     #[error("unknown key id")]
     UnknownKeyId,
+    #[error("unsupported algorithm")]
+    UnsupportedAlgorithm,
+    #[error("critical headers present but not understood")]
+    CriticalHeadersNotUnderstood,
     #[error("CBOR deserialization failed: {0}")]
     Cbor(String),
 }
@@ -48,16 +52,18 @@ pub fn build_detached_attestation(
     signer: &dyn AuditSigner,
     payload: &[u8],
 ) -> Result<Vec<u8>, AttestationBuildError> {
-    let signed_at = Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
+    let epoch_seconds = Utc::now().timestamp();
+
+    let cwt_claims = ciborium::Value::Map(vec![(
+        ciborium::Value::Integer(CWT_IAT_KEY.into()),
+        ciborium::Value::Integer(epoch_seconds.into()),
+    )]);
 
     let protected = HeaderBuilder::new()
         .algorithm(cose_alg(signer.algorithm()))
         .key_id(signer.key_id().as_bytes().to_vec())
-        .value(
-            CONTENT_TYPE_LABEL,
-            ciborium::Value::Text(CONTENT_TYPE_VALUE.to_string()),
-        )
-        .value(SIGNED_AT_LABEL, ciborium::Value::Text(signed_at))
+        .content_type(CONTENT_TYPE_VALUE.to_string())
+        .value(CWT_CLAIMS_LABEL, cwt_claims)
         .build();
 
     let sign1 = CoseSign1Builder::new()
@@ -101,16 +107,25 @@ pub fn verify_detached_attestation(
 
     let protected = &envelope.protected.header;
 
+    match &protected.alg {
+        Some(coset::RegisteredLabelWithPrivate::Assigned(coset::iana::Algorithm::EdDSA)) => {}
+        _ => return Err(AttestationVerifyError::UnsupportedAlgorithm),
+    }
+
+    if !protected.crit.is_empty() {
+        return Err(AttestationVerifyError::CriticalHeadersNotUnderstood);
+    }
+
     if protected.key_id.is_empty() {
         return Err(AttestationVerifyError::MissingKid);
     }
     let kid = &protected.key_id;
 
-    let has_ct = protected.rest.iter().any(|(label, val)| {
-        *label == Label::Int(CONTENT_TYPE_LABEL)
-            && matches!(val, ciborium::Value::Text(s) if s == CONTENT_TYPE_VALUE)
-    });
-    if !has_ct {
+    let ct_matches = match &protected.content_type {
+        Some(coset::ContentType::Text(s)) => s == CONTENT_TYPE_VALUE,
+        _ => false,
+    };
+    if !ct_matches {
         return Err(AttestationVerifyError::ContentTypeMismatch);
     }
 
@@ -135,6 +150,7 @@ pub fn verify_detached_attestation(
 mod tests {
     use super::*;
     use crate::signing::{LocalEd25519Signer, SignerKeyId};
+    use coset::Label;
     use std::collections::HashMap;
 
     fn test_signer() -> LocalEd25519Signer {
@@ -184,6 +200,35 @@ mod tests {
         let keyring = HashMap::new();
         let result = verify_detached_attestation(b"not cbor", b"", &keyring);
         assert!(matches!(result, Err(AttestationVerifyError::Cbor(_))));
+    }
+
+    #[test]
+    fn attestation_uses_standard_content_type_label() {
+        let signer = test_signer();
+        let cbor = build_detached_attestation(&signer, b"test").unwrap();
+        let envelope = CoseSign1::from_slice(&cbor).unwrap();
+        let ct = &envelope.protected.header.content_type;
+        assert_eq!(
+            ct,
+            &Some(coset::ContentType::Text(CONTENT_TYPE_VALUE.to_string()))
+        );
+    }
+
+    #[test]
+    fn attestation_uses_cwt_claims_for_timestamp() {
+        let signer = test_signer();
+        let cbor = build_detached_attestation(&signer, b"test").unwrap();
+        let envelope = CoseSign1::from_slice(&cbor).unwrap();
+        let has_cwt = envelope
+            .protected
+            .header
+            .rest
+            .iter()
+            .any(|(label, _)| *label == Label::Int(CWT_CLAIMS_LABEL));
+        assert!(
+            has_cwt,
+            "protected header must contain CWT Claims (label 15)"
+        );
     }
 
     #[test]
