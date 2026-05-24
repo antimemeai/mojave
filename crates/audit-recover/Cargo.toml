@@ -1,0 +1,21 @@
+[package]
+name = "audit-recover"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Crash recovery, chain replay, and garbage collection for mojave audit"
+
+[dependencies]
+audit-chain = { path = "../audit-chain" }
+serde_json = "1"
+sha2 = "0.10"
+thiserror = "2"
+
+[dev-dependencies]
+chrono = { version = "0.4", features = ["serde"] }
+tempfile = "3"
+
+[lints]
+workspace = true
