@@ -23,12 +23,11 @@ from pathlib import Path
 from typing import Any
 
 RESULTS_FILES = {
-    "arc_challenge": "data/arc-workup/results.json",
-    "cybermetric_2000": "data/cybermetric/results.json",
-    "mmlu_0_shot": "data/mmlu/results.json",
-    "hellaswag": "data/hellaswag/results.json",
-    "truthfulqa": "data/truthfulqa/results.json",
-    "gsm8k": "data/gsm8k/results.json",
+    "arc_challenge": "data/destructive/arc/results.json",
+    "cybermetric_2000": "data/destructive/cybermetric/results.json",
+    "mmlu_0_shot": "data/destructive/mmlu/results.json",
+    "hellaswag": "data/destructive/hellaswag/results.json",
+    "truthfulqa": "data/destructive/truthfulqa/results.json",
 }
 
 ANALYSIS_DIR = Path("data/analysis")

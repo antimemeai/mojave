@@ -256,7 +256,9 @@ def generate_config(name: str, data: dict) -> str:
     else:
         data_json = json.dumps(data, sort_keys=True)
         data_hash = hashlib.sha256(data_json.encode()).hexdigest()
-    lines.append(rf"\rcset{{companion.hash}}    {{\texttt{{sha256:{data_hash}}}}}")
+    mid = len(data_hash) // 2
+    h1, h2 = data_hash[:mid], data_hash[mid:]
+    lines.append(rf"\rcset{{companion.hash}}    {{\texttt{{sha256:{h1}\allowbreak {h2}}}}}")
     lines.append(
         r"\rcset{companion.contents}{Per-variant accuracy, per-item response matrix, "
         r"perturbation stability analysis, sequential stopping results, "
@@ -440,7 +442,9 @@ def generate_cross_eval_config(summary: dict) -> str:
     else:
         summary_json = json.dumps(summary, sort_keys=True)
         summary_hash = hashlib.sha256(summary_json.encode()).hexdigest()
-    lines.append(rf"\rcset{{companion.hash}}    {{\texttt{{sha256:{summary_hash}}}}}")
+    mid = len(summary_hash) // 2
+    h1, h2 = summary_hash[:mid], summary_hash[mid:]
+    lines.append(rf"\rcset{{companion.hash}}    {{\texttt{{sha256:{h1}\allowbreak {h2}}}}}")
     lines.append(
         r"\rcset{companion.contents}{Per-eval analysis summaries, "
         r"perturbation stability metrics, sequential stopping results, "
@@ -502,7 +506,9 @@ def main() -> None:
                 for line in config_lines:
                     if r"\rcset{audit.chain.tip}" in line:
                         tip = seal_result["chain_tip_hash"]
-                        line = rf"\rcset{{audit.chain.tip}}   {{\texttt{{{tip}}}}}"
+                        mid = len(tip) // 2
+                        h1, h2 = tip[:mid], tip[mid:]
+                        line = rf"\rcset{{audit.chain.tip}}   {{\texttt{{{h1}\allowbreak {h2}}}}}"
                     elif r"\rcset{audit.chain.seq}" in line:
                         line = rf"\rcset{{audit.chain.seq}}   {{{seal_result['chain_tip_seq']}}}"
                     elif r"\rcset{audit.signed}" in line:
