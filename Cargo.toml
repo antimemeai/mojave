@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/audit-chain",
+    "crates/audit-emit",
     "crates/audit-events",
     "crates/audit-recover",
     "crates/audit-sign",
