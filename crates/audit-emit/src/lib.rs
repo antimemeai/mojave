@@ -5,3 +5,4 @@ pub mod blob_store;
 pub mod config;
 pub mod emitter;
 pub mod error;
+pub mod gate;
