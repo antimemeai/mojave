@@ -28,6 +28,7 @@ RESULTS_FILES = {
     "mmlu_0_shot": "data/destructive/mmlu/results.json",
     "hellaswag": "data/destructive/hellaswag/results.json",
     "truthfulqa": "data/destructive/truthfulqa/results.json",
+    "wmdp_chem": "data/destructive/wmdp_chem/results.json",
 }
 
 ANALYSIS_DIR = Path("data/analysis")

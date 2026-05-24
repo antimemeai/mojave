@@ -18,6 +18,10 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from audit import emit as audit
+
 VARIANT_TIMEOUT = 1800
 MAX_RETRIES = 2
 
@@ -117,6 +121,19 @@ def run_variant(
     env["OPENAI_BASE_URL"] = base_url
     env["OPENAI_API_KEY"] = "EMPTY"
 
+    variant_detail = {
+        "variant_id": vid,
+        "block": variant.get("block"),
+        "task": base_task,
+        "model": model,
+    }
+    audit(
+        "eval.started",
+        resource_kind="eval",
+        resource_id=vid,
+        detail=variant_detail,
+    )
+
     err = ""
     for attempt in range(1, retries + 1):
         cmd = build_inspect_cmd(
@@ -137,6 +154,12 @@ def run_variant(
             )
             if result.returncode == 0:
                 print(f"[{index}/{total}] {vid} -> OK", file=sys.stderr)
+                audit(
+                    "eval.completed",
+                    resource_kind="eval",
+                    resource_id=vid,
+                    detail=variant_detail,
+                )
                 return vid, True, ""
             err = result.stderr[:300]
             print(
@@ -154,6 +177,13 @@ def run_variant(
         if attempt < retries:
             time.sleep(5)
 
+    audit(
+        "eval.failed",
+        resource_kind="eval",
+        resource_id=vid,
+        outcome="Failed",
+        detail={**variant_detail, "error": err[:200]},
+    )
     return vid, False, err
 
 

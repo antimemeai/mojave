@@ -42,6 +42,11 @@ EVALS = {
         "manifest": "data/destructive/truthfulqa/manifest.json",
         "output": "data/destructive/truthfulqa/results.json",
     },
+    "wmdp_chem": {
+        "log_dir": "data/destructive/wmdp_chem/logs",
+        "manifest": "data/destructive/wmdp_chem/manifest.json",
+        "output": "data/destructive/wmdp_chem/results.json",
+    },
 }
 
 
