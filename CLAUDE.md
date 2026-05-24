@@ -57,6 +57,21 @@ Extreme rigor baseline. No shortcuts.
 - Python: scripting/orchestration layer, torch_measure integration
 - Clean API boundaries between layers — no coupling nightmares
 
+## Eval infrastructure (RunPod + vLLM)
+
+Eval runs use throwaway RunPod GPU pods serving Qwen2.5-7B-Instruct via vLLM.
+Full runbook: `scripts/destructive/RUNPOD_RUNBOOK.md`
+
+**Critical**: Use `vllm/vllm-openai` Docker image with `docker_args` for model config.
+Do NOT use a base PyTorch image with SSH-based setup — it fails at scale (timeouts,
+PTY issues, no recovery). Consumer GPUs (3090/4090) require `--enforce-eager` and
+`env={"VLLM_USE_V1": "0"}` or vLLM crashes silently.
+
+Scripts: `scripts/destructive/create_pods.py` (create), `teardown_pods.py` (terminate),
+`run_destructive.py` (run evals), `gen_destructive_manifest.py` (generate variant manifests).
+
+**ALWAYS terminate pods when done.** 15 pods × ~$0.30/hr adds up fast.
+
 ## Key decisions made
 - Product: framework surfacing measurement questions + running ablations on customer infra
 - Market: defense establishment first, regulated industries follow
