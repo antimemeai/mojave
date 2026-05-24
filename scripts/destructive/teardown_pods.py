@@ -11,6 +11,10 @@ from pathlib import Path
 
 import runpod
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from audit import emit as audit
+
 PODS_FILE = Path("data/destructive/pods.json")
 ENDPOINTS_FILE = Path("data/destructive/endpoints.json")
 META_FILE = Path("data/destructive/meta.json")
@@ -64,6 +68,12 @@ def main() -> None:
             runpod.terminate_pod(pid)
             print(f"  {p['name']} ({pid}): terminated")
             terminated += 1
+            audit(
+                "pod.terminated",
+                resource_kind="pod",
+                resource_id=pid,
+                detail={"name": p["name"], "model": model},
+            )
         except Exception as e:
             print(f"  {p['name']} ({pid}): failed — {e}")
 

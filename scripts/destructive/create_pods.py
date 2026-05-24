@@ -18,6 +18,10 @@ import time
 from pathlib import Path
 
 import runpod
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from audit import emit as audit
 from profiles import load_profile
 
 PODS_FILE = Path("data/destructive/pods.json")
@@ -73,6 +77,17 @@ def create_batch(profile: dict, start_index: int, count: int) -> list[dict]:
             )
             print(f"  {name}: {pod['id']}", file=sys.stderr)
             created.append({"id": pod["id"], "name": name})
+            audit(
+                "pod.created",
+                resource_kind="pod",
+                resource_id=pod["id"],
+                detail={
+                    "name": name,
+                    "gpu_type": profile["gpu_type"],
+                    "gpu_count": profile["gpu_count"],
+                    "model": profile["model"],
+                },
+            )
         except Exception as e:
             print(f"  {name}: FAILED — {e}", file=sys.stderr)
     return created
@@ -133,6 +148,12 @@ def main() -> None:
             if pid not in ready and check_endpoint(pid):
                 ready.add(pid)
                 print(f"  {pid}: READY ({len(ready)}/{len(pod_ids)})", file=sys.stderr)
+                audit(
+                    "pod.ready",
+                    resource_kind="pod",
+                    resource_id=pid,
+                    detail={"model": profile["model"]},
+                )
         if len(ready) == len(pod_ids):
             break
         time.sleep(10)
