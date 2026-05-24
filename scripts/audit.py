@@ -190,6 +190,7 @@ def _escape_string(s: str) -> str:
     return "".join(buf)
 
 
+_init_lock = threading.Lock()
 _chain: AuditChain | None = None
 
 
@@ -208,8 +209,9 @@ def emit(
 ) -> int:
     """Module-level emit — initializes chain on first call."""
     global _chain
-    if _chain is None or _chain.audit_dir != audit_dir:
-        _chain = AuditChain(audit_dir)
+    with _init_lock:
+        if _chain is None or _chain.audit_dir != audit_dir:
+            _chain = AuditChain(audit_dir)
     return _chain.emit(
         event_kind,
         resource_kind=resource_kind,
