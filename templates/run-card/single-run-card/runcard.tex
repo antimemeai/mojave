@@ -237,6 +237,21 @@
   \textcolor{rcmute}{\footnotesize\ (bootstrap)}}
 \end{rcfacts}
 
+% ---------------------------------------- SENSITIVITY DECOMPOSITION (Sobol') ----
+\section{Sensitivity Decomposition \textnormal{\small(Sobol')}}
+\begin{rcfacts}
+\fact{Design}{\rc{sobol.design}}
+\fact{Sample size}{$N = \rc{sobol.N.base}$, $k = \rc{sobol.k}$,
+  total cells $= \rc{sobol.n.cells}$}
+\fact{Dominant factor}{\rc{sobol.dominant}}
+\fact{Sum diagnostic}{$\sum S_i = \rc{sobol.sum.S1}$ \quad
+  $\sum S_{T_i} = \rc{sobol.sum.ST}$
+  \textcolor{rcmute}{\footnotesize\ ($\sum S_i \approx 1$ if additive;
+  $\sum S_{T_i} > 1$ indicates interactions)}}
+\fact{Sobol' indices}{\rc{sobol.table}}
+\fact{Borgonovo $\delta$}{\rc{borgonovo.table}}
+\end{rcfacts}
+
 % ------------------------------------ SEQUENTIAL STOPPING (RETROSPECTIVE) ----
 \section{Sequential Stopping \textnormal{\small(Retrospective)}}
 \begin{rcfacts}
