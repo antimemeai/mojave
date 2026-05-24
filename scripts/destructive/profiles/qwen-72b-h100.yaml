@@ -1,0 +1,13 @@
+model: "Qwen/Qwen2.5-72B-Instruct"
+gpu_type: "NVIDIA H100 80GB HBM3"
+gpu_count: 4
+tensor_parallel_size: 4
+max_model_len: 32768
+enforce_eager: false
+vllm_use_v1: true
+gpu_memory_utilization: 0.9
+container_disk_gb: 100
+volume_gb: 100
+total_pods: 4
+batch_size: 2
+hourly_cost_per_pod: 3.89
