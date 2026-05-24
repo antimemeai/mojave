@@ -233,18 +233,22 @@ mod tests {
 
     #[test]
     fn tip_attestation_round_trip() {
-        use audit_chain::entry::{Action, AuditEntryBuilder, Decision, Principal};
+        use audit_chain::entry::{AuditEntryBuilder, Principal};
         use audit_chain::seal::ChainHead;
         use chrono::{TimeZone, Utc};
 
         let mut head = ChainHead::new();
         let entry = AuditEntryBuilder::new()
             .seq(0)
-            .actor(Principal::System { id: "test".into() })
-            .action(Action::Observed)
-            .decision(Decision::Observed)
+            .actor(Principal {
+                kind: "System".into(),
+                id: "test".into(),
+            })
+            .event("eval.started")
+            .authorization("Allowed")
+            .outcome("Succeeded")
             .at(Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap())
-            .context(serde_json::json!({}))
+            .detail(serde_json::json!({}))
             .build()
             .unwrap();
         head.link(entry).unwrap();
