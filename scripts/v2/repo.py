@@ -40,6 +40,10 @@ def audit_seal(
     run_id: str,
     eval_name: str,
     data_file: Path,
+    model_name: str = "unknown",
+    model_provider: str = "unknown",
+    model_hash: str = "00" * 32,
+    model_hash_method: str = "StructuredDescriptor",
     actor: str = "generate_run_cards_v2.py",
 ) -> dict[str, Any] | None:
     data_sha256 = compute_file_sha256(data_file)
@@ -50,6 +54,12 @@ def audit_seal(
         "data_file": str(data_file),
         "data_sha256": data_sha256,
         "actor": {"kind": "System", "id": actor},
+        "model": {
+            "name": model_name,
+            "provider": model_provider,
+            "hash_method": model_hash_method,
+            "hash": model_hash,
+        },
     }
     try:
         result = subprocess.run(

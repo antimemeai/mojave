@@ -41,53 +41,52 @@ def load_chain(path: Path) -> list[dict]:
 
 
 def check_chain_integrity(entries: list[dict]) -> list[str]:
-    """Verify parent_hash linkage (DAG check for concurrent writers).
+    """Verify hash chain linkage (DAG parent_hash -> entry_hash)."""
+    issues: list[str] = []
+    if not entries:
+        issues.append("FAIL: empty chain (missing genesis)")
+        return issues
 
-    The chain JSONL may have entries out of seq order because concurrent
-    processes append independently.  Each entry's parent_hash must exist
-    as some other entry's entry_hash (except genesis).  We also check for
-    duplicate seq numbers and report the tip.
-    """
-    findings: list[str] = []
+    first = entries[0]
+    if first.get("type") != "Genesis":
+        issues.append(f"FAIL: first entry is {first.get('type', 'unknown')}, expected Genesis")
 
-    known_hashes: set[bytes] = set()
-    seqs_seen: dict[int, int] = {}
-    orphan_parents = 0
+    seen_hashes: dict[str, int] = {}
+    for i, entry in enumerate(entries):
+        entry_type = entry.get("type", "unknown")
+        base = entry.get("base", {})
+        seq = base.get("seq", "?")
 
-    for entry in entries:
-        eh = bytes(entry["entry_hash"])
-        known_hashes.add(eh)
-        seq = entry["base"]["seq"]
-        seqs_seen[seq] = seqs_seen.get(seq, 0) + 1
+        if entry_type == "Genesis":
+            if i != 0:
+                issues.append(f"FAIL: duplicate Genesis at index {i}")
+        elif entry_type == "Chained":
+            parent_hash = entry.get("parent_hash")
+            if parent_hash is not None:
+                parent_key = str(parent_hash)
+                if i > 0:
+                    prev_hash = str(entries[i - 1].get("entry_hash"))
+                    if parent_key != prev_hash:
+                        issues.append(
+                            f"FAIL: entry {i} (seq {seq}) parent_hash does not match "
+                            f"previous entry_hash"
+                        )
+        else:
+            issues.append(f"FAIL: unknown entry type {entry_type!r} at index {i}")
 
-    for entry in entries:
-        raw_parent = entry.get("parent_hash")
-        if not raw_parent:
-            continue
-        parent_hash = bytes(raw_parent)
-        if parent_hash == bytes(32):
-            continue
-        if parent_hash not in known_hashes:
-            seq = entry["base"]["seq"]
-            findings.append(
-                f"FAIL: orphan parent at seq={seq}: {parent_hash.hex()[:16]}... not in chain"
+        entry_hash = str(entry.get("entry_hash"))
+        if entry_hash in seen_hashes:
+            issues.append(
+                f"FAIL: duplicate entry_hash at index {i} (seq {seq}), "
+                f"first seen at index {seen_hashes[entry_hash]}"
             )
-            orphan_parents += 1
+        seen_hashes[entry_hash] = i
 
-    dup_seqs = {s: c for s, c in seqs_seen.items() if c > 1}
-    if dup_seqs:
-        findings.append(
-            f"WARN: {len(dup_seqs)} duplicate seq numbers "
-            f"(concurrent writers): e.g. {list(dup_seqs.keys())[:5]}"
-        )
+    if not issues:
+        max_seq = max(e.get("base", {}).get("seq", 0) for e in entries)
+        issues.append(f"OK: chain integrity verified ({len(entries)} entries, max seq {max_seq})")
 
-    max_seq = max(seqs_seen.keys()) if seqs_seen else 0
-    findings.append(f"INFO: {len(entries)} entries, max seq={max_seq}")
-
-    if orphan_parents == 0:
-        findings.append("INFO: all parent hashes resolve within chain")
-
-    return findings
+    return issues
 
 
 def check_data_hashes(entries: list[dict], data_dir: Path) -> list[str]:

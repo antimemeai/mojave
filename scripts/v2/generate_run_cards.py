@@ -307,6 +307,10 @@ def main() -> None:
         run_id=f"MOJAVE-V2-{eval_name.upper()}",
         eval_name=eval_name,
         data_file=args.analysis,
+        model_name=analysis.get("model_name", "unknown"),
+        model_provider=analysis.get("model_provider", "unknown"),
+        model_hash=analysis.get("model_hash", "00" * 32),
+        model_hash_method=analysis.get("model_hash_method", "StructuredDescriptor"),
     )
     if seal_result:
         config_lines = config_content.rstrip().split("\n")
