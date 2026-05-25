@@ -2,11 +2,23 @@
 
 use std::collections::BTreeMap;
 
+use audit_chain::model_identity::{ModelHashMethod, ModelIdentity};
 use audit_emit::config::EmitterConfig;
 use audit_emit::emitter::Emitter;
 use audit_events::*;
 use chrono::Utc;
 use tempfile::tempdir;
+
+fn sample_model() -> ModelIdentity {
+    ModelIdentity {
+        name: "test-model".into(),
+        provider: "test-provider".into(),
+        version: None,
+        quantization: None,
+        hash_method: ModelHashMethod::StructuredDescriptor,
+        hash: [42u8; 32],
+    }
+}
 
 fn sample_event(kind: EventKind) -> AuditEvent {
     AuditEvent {
@@ -34,31 +46,31 @@ fn sample_event(kind: EventKind) -> AuditEvent {
 #[test]
 fn emit_single_event() {
     let dir = tempdir().unwrap();
-    let mut emitter = Emitter::open(dir.path()).unwrap();
+    let mut emitter = Emitter::open(dir.path(), sample_model()).unwrap();
     let sealed = emitter.emit(sample_event(EventKind::EvalStarted)).unwrap();
-    assert_eq!(sealed.base.seq, 0);
-    assert_eq!(sealed.base.event, "eval.started");
+    assert_eq!(sealed.seq(), 1);
+    assert_eq!(sealed.base().event, "eval.started");
 }
 
 #[test]
 fn emit_multiple_events_chain_correctly() {
     let dir = tempdir().unwrap();
-    let mut emitter = Emitter::open(dir.path()).unwrap();
+    let mut emitter = Emitter::open(dir.path(), sample_model()).unwrap();
 
     let s0 = emitter.emit(sample_event(EventKind::EvalStarted)).unwrap();
     let s1 = emitter
         .emit(sample_event(EventKind::EvalCompleted))
         .unwrap();
 
-    assert_eq!(s0.base.seq, 0);
-    assert_eq!(s1.base.seq, 1);
-    assert_eq!(s1.parent_hash, Some(s0.entry_hash));
+    assert_eq!(s0.seq(), 1);
+    assert_eq!(s1.seq(), 2);
+    assert_eq!(s1.parent_hash(), Some(s0.entry_hash()));
 }
 
 #[test]
 fn emit_persists_to_jsonl() {
     let dir = tempdir().unwrap();
-    let mut emitter = Emitter::open(dir.path()).unwrap();
+    let mut emitter = Emitter::open(dir.path(), sample_model()).unwrap();
     emitter.emit(sample_event(EventKind::EvalStarted)).unwrap();
     emitter
         .emit(sample_event(EventKind::EvalCompleted))
@@ -67,7 +79,7 @@ fn emit_persists_to_jsonl() {
 
     let chain_path = dir.path().join("chain.jsonl");
     let contents = std::fs::read_to_string(&chain_path).unwrap();
-    assert_eq!(contents.lines().count(), 2);
+    assert_eq!(contents.lines().count(), 3);
 }
 
 #[test]
@@ -75,16 +87,16 @@ fn reopen_continues_chain() {
     let dir = tempdir().unwrap();
 
     {
-        let mut emitter = Emitter::open(dir.path()).unwrap();
+        let mut emitter = Emitter::open(dir.path(), sample_model()).unwrap();
         emitter.emit(sample_event(EventKind::EvalStarted)).unwrap();
     }
 
     {
-        let mut emitter = Emitter::open(dir.path()).unwrap();
+        let mut emitter = Emitter::open(dir.path(), sample_model()).unwrap();
         let sealed = emitter
             .emit(sample_event(EventKind::EvalCompleted))
             .unwrap();
-        assert_eq!(sealed.base.seq, 1);
+        assert_eq!(sealed.seq(), 2);
     }
 }
 
@@ -95,14 +107,16 @@ fn detail_auto_promoted_to_blob() {
         detail_max_bytes: 10,
         ..EmitterConfig::default()
     };
-    let mut emitter = Emitter::open(dir.path()).unwrap().with_config(config);
+    let mut emitter = Emitter::open(dir.path(), sample_model())
+        .unwrap()
+        .with_config(config);
 
     let mut event = sample_event(EventKind::EvalStarted);
     event.detail = serde_json::json!({"large_data": "x".repeat(100)});
 
     let sealed = emitter.emit(event).unwrap();
-    assert!(sealed.base.blob_ref.is_some());
-    assert!(sealed.base.detail.get("__promoted_to_blob").is_some());
+    assert!(sealed.base().blob_ref.is_some());
+    assert!(sealed.base().detail.get("__promoted_to_blob").is_some());
 
     let blob_dir = dir.path().join("blobs");
     assert!(blob_dir.exists());
@@ -112,7 +126,7 @@ fn detail_auto_promoted_to_blob() {
 #[test]
 fn emit_with_explicit_blob() {
     let dir = tempdir().unwrap();
-    let mut emitter = Emitter::open(dir.path()).unwrap();
+    let mut emitter = Emitter::open(dir.path(), sample_model()).unwrap();
     let blob_data = b"large payload data here";
 
     let sealed = emitter
@@ -123,13 +137,13 @@ fn emit_with_explicit_blob() {
         )
         .unwrap();
 
-    assert!(sealed.base.blob_ref.is_some());
+    assert!(sealed.base().blob_ref.is_some());
 }
 
 #[test]
 fn tag_validation_rejects_too_many() {
     let dir = tempdir().unwrap();
-    let mut emitter = Emitter::open(dir.path()).unwrap();
+    let mut emitter = Emitter::open(dir.path(), sample_model()).unwrap();
 
     let mut event = sample_event(EventKind::EvalStarted);
     for i in 0..33 {

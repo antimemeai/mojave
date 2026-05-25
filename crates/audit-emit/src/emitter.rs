@@ -5,6 +5,7 @@ use audit_chain::entry::{
     AuditEntryBuilder, BlobLocation as ChainBlobLocation, BlobRef as ChainBlobRef,
     Principal as ChainPrincipal, ResourceRef as ChainResourceRef,
 };
+use audit_chain::model_identity::ModelIdentity;
 use audit_chain::seal::{ChainHead, SealedAuditEntry};
 use audit_events::{validate_tags, AuditEvent, BlobLocation};
 use audit_sign::signing::AuditSigner;
@@ -22,10 +23,11 @@ pub struct Emitter {
     config: EmitterConfig,
     lock_file: std::fs::File,
     audit_dir: PathBuf,
+    genesis_pending: Option<SealedAuditEntry>,
 }
 
 impl Emitter {
-    pub fn open(audit_dir: &Path) -> Result<Self, AuditError> {
+    pub fn open(audit_dir: &Path, model: ModelIdentity) -> Result<Self, AuditError> {
         std::fs::create_dir_all(audit_dir)?;
 
         let lock_path = audit_dir.join(".lock");
@@ -37,24 +39,44 @@ impl Emitter {
         lock_file.lock_exclusive()?;
 
         let chain_path = audit_dir.join("chain.jsonl");
-        let chain = if chain_path.exists() {
+        let (chain, genesis_pending) = if chain_path.exists() {
             let result = audit_recover::replay::replay_chain_file(&chain_path)?;
-            result.chain_head
+            match result.chain_head {
+                Some(head) => (head, None),
+                None => {
+                    let (head, genesis) = ChainHead::new(model, chrono::Utc::now())?;
+                    (head, Some(genesis))
+                }
+            }
         } else {
-            ChainHead::new()
+            let (head, genesis) = ChainHead::new(model, chrono::Utc::now())?;
+            (head, Some(genesis))
         };
 
         let blob_store = BlobStore::new(audit_dir.join("blobs"));
 
-        Ok(Self {
+        let mut emitter = Self {
             chain,
-            chain_path,
+            chain_path: chain_path.clone(),
             blob_store,
             signer: None,
             config: EmitterConfig::default(),
             lock_file,
             audit_dir: audit_dir.to_path_buf(),
-        })
+            genesis_pending,
+        };
+
+        if let Some(genesis) = emitter.genesis_pending.take() {
+            let line = serde_json::to_string(&genesis)?;
+            let mut file = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&chain_path)?;
+            writeln!(file, "{line}")?;
+            file.sync_all()?;
+        }
+
+        Ok(emitter)
     }
 
     pub fn with_signer(mut self, signer: Box<dyn AuditSigner>) -> Self {
@@ -177,7 +199,7 @@ impl Emitter {
 
             let att_dir = self.audit_dir.join("attestations");
             std::fs::create_dir_all(&att_dir)?;
-            std::fs::write(att_dir.join(format!("{}.cbor", sealed.base.seq)), &cbor)?;
+            std::fs::write(att_dir.join(format!("{}.cbor", sealed.seq())), &cbor)?;
         }
 
         Ok(sealed)
