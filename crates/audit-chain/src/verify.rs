@@ -1,5 +1,5 @@
 use crate::canonical::CanonicalEncodingError;
-use crate::seal::{compute_entry_hash, SealedAuditEntry};
+use crate::seal::{compute_chained_hash, compute_genesis_hash, SealedAuditEntry};
 
 #[derive(Debug, Clone)]
 #[non_exhaustive]
@@ -66,38 +66,48 @@ impl ChainVerifier {
         let mut findings = Vec::new();
 
         for (i, entry) in entries.iter().enumerate() {
-            if i == 0 && entry.parent_hash.is_some() {
+            if i == 0 && entry.parent_hash().is_some() {
                 findings.push(ChainFinding::NonGenesisAtIndexZero);
             }
 
             let expected_seq = if i == 0 {
-                entries.first().map_or(0, |e| e.base.seq)
+                entries.first().map_or(0, |e| e.seq())
             } else {
-                entries[i - 1].base.seq + 1
+                entries[i - 1].seq() + 1
             };
-            if i > 0 && entry.base.seq != expected_seq {
+            if i > 0 && entry.seq() != expected_seq {
                 findings.push(ChainFinding::SeqDiscontinuity {
                     index: i,
                     expected: expected_seq,
-                    actual: entry.base.seq,
+                    actual: entry.seq(),
                 });
             }
 
             if i > 0 {
-                let expected_parent = entries[i - 1].entry_hash;
-                if entry.parent_hash != Some(expected_parent) {
+                let expected_parent = entries[i - 1].entry_hash();
+                if entry.parent_hash() != Some(expected_parent) {
                     findings.push(ChainFinding::ParentHashMismatch {
                         index: i,
-                        seq: entry.base.seq,
+                        seq: entry.seq(),
                     });
                 }
             }
 
-            if let Ok(recomputed) = compute_entry_hash(&entry.base, entry.parent_hash) {
-                if recomputed != entry.entry_hash {
+            let recomputed = match entry {
+                SealedAuditEntry::Genesis {
+                    base,
+                    model_identity,
+                    ..
+                } => compute_genesis_hash(base, model_identity.hash),
+                SealedAuditEntry::Chained {
+                    base, parent_hash, ..
+                } => compute_chained_hash(base, *parent_hash),
+            };
+            if let Ok(hash) = recomputed {
+                if hash != entry.entry_hash() {
                     findings.push(ChainFinding::EntryHashMismatch {
                         index: i,
-                        seq: entry.base.seq,
+                        seq: entry.seq(),
                     });
                 }
             }
@@ -109,7 +119,16 @@ impl ChainVerifier {
     pub fn recompute_entry_hash(
         entry: &SealedAuditEntry,
     ) -> Result<[u8; 32], CanonicalEncodingError> {
-        compute_entry_hash(&entry.base, entry.parent_hash)
+        match entry {
+            SealedAuditEntry::Genesis {
+                base,
+                model_identity,
+                ..
+            } => compute_genesis_hash(base, model_identity.hash),
+            SealedAuditEntry::Chained {
+                base, parent_hash, ..
+            } => compute_chained_hash(base, *parent_hash),
+        }
     }
 }
 
@@ -117,8 +136,24 @@ impl ChainVerifier {
 mod tests {
     use super::*;
     use crate::entry::{AuditEntryBuilder, Principal};
+    use crate::model_identity::{ModelHashMethod, ModelIdentity};
     use crate::seal::ChainHead;
     use chrono::{TimeZone, Utc};
+
+    fn sample_model() -> ModelIdentity {
+        ModelIdentity {
+            name: "test-model".into(),
+            provider: "test-provider".into(),
+            version: None,
+            quantization: None,
+            hash_method: ModelHashMethod::StructuredDescriptor,
+            hash: [42u8; 32],
+        }
+    }
+
+    fn fixed_time() -> chrono::DateTime<Utc> {
+        Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap()
+    }
 
     fn sample_entry() -> crate::entry::AuditEntry {
         AuditEntryBuilder::new()
@@ -130,15 +165,20 @@ mod tests {
             .event("eval.started")
             .authorization("Allowed")
             .outcome("Succeeded")
-            .at(Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap())
+            .at(fixed_time())
             .detail(serde_json::json!({"trial": 1}))
             .build()
             .unwrap()
     }
 
     fn build_chain(n: usize) -> Vec<SealedAuditEntry> {
-        let mut head = ChainHead::new();
-        (0..n).map(|_| head.link(sample_entry()).unwrap()).collect()
+        assert!(n > 0, "chain must have at least 1 entry (genesis)");
+        let (mut head, genesis) = ChainHead::new(sample_model(), fixed_time()).unwrap();
+        let mut entries = vec![genesis];
+        for _ in 1..n {
+            entries.push(head.link(sample_entry()).unwrap());
+        }
+        entries
     }
 
     #[test]
@@ -158,7 +198,9 @@ mod tests {
     #[test]
     fn tampered_context_detected() {
         let mut chain = build_chain(4);
-        chain[2].base.detail = serde_json::json!({"tampered": true});
+        if let SealedAuditEntry::Chained { ref mut base, .. } = chain[2] {
+            base.detail = serde_json::json!({"tampered": true});
+        }
         let result = ChainVerifier::verify(&chain);
         assert!(!result.is_clean());
         assert!(result.has_entry_hash_mismatch_at_seq(2));
@@ -167,7 +209,13 @@ mod tests {
     #[test]
     fn tampered_parent_hash_detected() {
         let mut chain = build_chain(4);
-        chain[2].parent_hash = Some([0u8; 32]);
+        if let SealedAuditEntry::Chained {
+            ref mut parent_hash,
+            ..
+        } = chain[2]
+        {
+            *parent_hash = [0u8; 32];
+        }
         let result = ChainVerifier::verify(&chain);
         assert!(!result.is_clean());
         assert!(result.has_parent_hash_mismatch_at_seq(2));
@@ -176,7 +224,9 @@ mod tests {
     #[test]
     fn seq_discontinuity_detected() {
         let mut chain = build_chain(4);
-        chain[2].base.seq = 99;
+        if let SealedAuditEntry::Chained { ref mut base, .. } = chain[2] {
+            base.seq = 99;
+        }
         let result = ChainVerifier::verify(&chain);
         assert!(!result.is_clean());
         assert!(result.has_seq_discontinuity_at_index(2));
@@ -184,9 +234,14 @@ mod tests {
 
     #[test]
     fn non_genesis_at_zero_detected() {
-        let mut chain = build_chain(2);
-        chain[0].parent_hash = Some([1u8; 32]);
-        let result = ChainVerifier::verify(&chain);
+        let chain = build_chain(2);
+        let forged = SealedAuditEntry::Chained {
+            base: chain[0].base().clone(),
+            parent_hash: [1u8; 32],
+            entry_hash: chain[0].entry_hash(),
+        };
+        let tampered = vec![forged, chain[1].clone()];
+        let result = ChainVerifier::verify(&tampered);
         assert!(result.has_non_genesis_at_index_zero());
     }
 
@@ -195,27 +250,31 @@ mod tests {
         let chain = build_chain(3);
         for entry in &chain {
             let recomputed = ChainVerifier::recompute_entry_hash(entry).unwrap();
-            assert_eq!(recomputed, entry.entry_hash);
+            assert_eq!(recomputed, entry.entry_hash());
         }
     }
 
     #[test]
     fn multiple_findings_can_accumulate() {
         let mut chain = build_chain(4);
-        chain[1].base.detail = serde_json::json!({"tampered": true});
-        chain[3].base.seq = 99;
+        if let SealedAuditEntry::Chained { ref mut base, .. } = chain[1] {
+            base.detail = serde_json::json!({"tampered": true});
+        }
+        if let SealedAuditEntry::Chained { ref mut base, .. } = chain[3] {
+            base.seq = 99;
+        }
         let result = ChainVerifier::verify(&chain);
         assert!(!result.is_clean());
         assert!(result.findings().len() >= 2);
     }
 
     #[test]
-    fn genesis_with_sentinel_verifies_clean() {
+    fn genesis_with_model_hash_verifies_clean() {
         let chain = build_chain(1);
-        assert!(chain[0].parent_hash.is_none());
+        assert!(chain[0].is_genesis());
         let result = ChainVerifier::verify(&chain);
         assert!(result.is_clean());
         let recomputed = ChainVerifier::recompute_entry_hash(&chain[0]).unwrap();
-        assert_eq!(recomputed, chain[0].entry_hash);
+        assert_eq!(recomputed, chain[0].entry_hash());
     }
 }
