@@ -29,6 +29,7 @@ pub enum EventKind {
     KeyGenerated,
     KeyLoaded,
     ChainVerified,
+    ChainGenesis,
     AttestationCreated,
 
     // System
@@ -56,6 +57,7 @@ impl EventKind {
             Self::KeyGenerated => "key.generated",
             Self::KeyLoaded => "key.loaded",
             Self::ChainVerified => "chain.verified",
+            Self::ChainGenesis => "chain.genesis",
             Self::AttestationCreated => "attestation.created",
             Self::ConfigChanged => "config.changed",
             Self::CircuitBreakerTripped => "circuit_breaker.tripped",
@@ -81,6 +83,7 @@ impl EventKind {
             "key.generated" => Some(Self::KeyGenerated),
             "key.loaded" => Some(Self::KeyLoaded),
             "chain.verified" => Some(Self::ChainVerified),
+            "chain.genesis" => Some(Self::ChainGenesis),
             "attestation.created" => Some(Self::AttestationCreated),
             "config.changed" => Some(Self::ConfigChanged),
             "circuit_breaker.tripped" => Some(Self::CircuitBreakerTripped),
@@ -107,6 +110,7 @@ impl EventKind {
             Self::KeyGenerated,
             Self::KeyLoaded,
             Self::ChainVerified,
+            Self::ChainGenesis,
             Self::AttestationCreated,
             Self::ConfigChanged,
             Self::CircuitBreakerTripped,
