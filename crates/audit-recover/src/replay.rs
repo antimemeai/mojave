@@ -14,7 +14,7 @@ pub enum ReplayError {
 
 #[derive(Debug)]
 pub struct ReplayResult {
-    pub chain_head: ChainHead,
+    pub chain_head: Option<ChainHead>,
     pub entry_count: usize,
     pub truncated_lines: usize,
 }
@@ -25,7 +25,7 @@ pub fn replay_chain_file(path: &std::path::Path) -> Result<ReplayResult, ReplayE
 }
 
 pub fn replay_chain_str(contents: &str) -> Result<ReplayResult, ReplayError> {
-    let mut head = ChainHead::new();
+    let mut head = None::<ChainHead>;
     let mut count = 0usize;
     let mut truncated = 0usize;
 
@@ -39,7 +39,7 @@ pub fn replay_chain_str(contents: &str) -> Result<ReplayResult, ReplayError> {
         }
         match serde_json::from_str::<SealedAuditEntry>(trimmed) {
             Ok(entry) => {
-                head = ChainHead::resume(entry.entry_hash, entry.base.seq + 1);
+                head = Some(ChainHead::resume(entry.entry_hash(), entry.seq() + 1));
                 count += 1;
             }
             Err(e) => {

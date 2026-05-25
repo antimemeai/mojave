@@ -35,7 +35,7 @@ pub fn collect_referenced_blob_hashes(chain_dir: &Path) -> Result<HashSet<String
                 continue;
             }
             if let Ok(sealed) = serde_json::from_str::<SealedAuditEntry>(trimmed) {
-                if let Some(blob_ref) = &sealed.base.blob_ref {
+                if let Some(blob_ref) = &sealed.base().blob_ref {
                     let hex: String =
                         blob_ref
                             .hash
