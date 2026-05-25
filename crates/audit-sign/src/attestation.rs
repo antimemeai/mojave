@@ -234,10 +234,20 @@ mod tests {
     #[test]
     fn tip_attestation_round_trip() {
         use audit_chain::entry::{AuditEntryBuilder, Principal};
+        use audit_chain::model_identity::{ModelHashMethod, ModelIdentity};
         use audit_chain::seal::ChainHead;
         use chrono::{TimeZone, Utc};
 
-        let mut head = ChainHead::new();
+        let model = ModelIdentity {
+            name: "test-model".into(),
+            provider: "test-provider".into(),
+            version: None,
+            quantization: None,
+            hash_method: ModelHashMethod::StructuredDescriptor,
+            hash: [42u8; 32],
+        };
+        let (mut head, _) =
+            ChainHead::new(model, Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap()).unwrap();
         let entry = AuditEntryBuilder::new()
             .seq(0)
             .actor(Principal {
