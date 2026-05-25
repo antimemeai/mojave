@@ -24,6 +24,10 @@ pub enum ChainFinding {
     DuplicateGenesis {
         index: usize,
     },
+    CanonicalEncodingFailed {
+        index: usize,
+        seq: u64,
+    },
 }
 
 #[derive(Debug)]
@@ -81,6 +85,12 @@ impl ChainFindings {
             .iter()
             .any(|f| matches!(f, ChainFinding::DuplicateGenesis { index: i } if *i == index))
     }
+
+    pub fn has_canonical_encoding_failed_at_index(&self, index: usize) -> bool {
+        self.findings.iter().any(
+            |f| matches!(f, ChainFinding::CanonicalEncodingFailed { index: i, .. } if *i == index),
+        )
+    }
 }
 
 pub struct ChainVerifier;
@@ -104,13 +114,19 @@ impl ChainVerifier {
                         base,
                         model_identity,
                         entry_hash,
-                    } => {
-                        if let Ok(recomputed) = compute_genesis_hash(base, model_identity.hash) {
+                    } => match compute_genesis_hash(base, model_identity.hash) {
+                        Ok(recomputed) => {
                             if recomputed != *entry_hash {
                                 findings.push(ChainFinding::GenesisHashMismatch);
                             }
                         }
-                    }
+                        Err(_) => {
+                            findings.push(ChainFinding::CanonicalEncodingFailed {
+                                index: i,
+                                seq: base.seq,
+                            });
+                        }
+                    },
                 }
             } else {
                 match entry {
@@ -130,9 +146,17 @@ impl ChainVerifier {
                             });
                         }
 
-                        if let Ok(recomputed) = compute_chained_hash(base, *parent_hash) {
-                            if recomputed != *entry_hash {
-                                findings.push(ChainFinding::EntryHashMismatch {
+                        match compute_chained_hash(base, *parent_hash) {
+                            Ok(recomputed) => {
+                                if recomputed != *entry_hash {
+                                    findings.push(ChainFinding::EntryHashMismatch {
+                                        index: i,
+                                        seq: base.seq,
+                                    });
+                                }
+                            }
+                            Err(_) => {
+                                findings.push(ChainFinding::CanonicalEncodingFailed {
                                     index: i,
                                     seq: base.seq,
                                 });

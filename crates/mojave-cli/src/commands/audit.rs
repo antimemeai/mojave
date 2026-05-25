@@ -315,6 +315,13 @@ fn resolve_signer(key_file: Option<&Path>) -> Result<Option<LocalEd25519Signer>,
 pub fn run_emit(blob_file: Option<&Path>, audit_dir: Option<&Path>) -> Result<(), CliError> {
     let audit_path = audit_dir.unwrap_or(Path::new("data/audit"));
 
+    let chain_path = audit_path.join("chain.jsonl");
+    if !chain_path.exists() {
+        return Err(CliError::Audit(
+            "no existing chain found; use 'seal' to create a new chain with model identity".into(),
+        ));
+    }
+
     let mut stdin_buf = String::new();
     std::io::stdin()
         .read_to_string(&mut stdin_buf)
@@ -323,16 +330,7 @@ pub fn run_emit(blob_file: Option<&Path>, audit_dir: Option<&Path>) -> Result<()
     let event: audit_events::AuditEvent = serde_json::from_str(&stdin_buf)
         .map_err(|e| CliError::Audit(format!("invalid event JSON: {e}")))?;
 
-    let model = ModelIdentity {
-        name: "unknown".into(),
-        provider: "unknown".into(),
-        version: None,
-        quantization: None,
-        hash_method: ModelHashMethod::StructuredDescriptor,
-        hash: [0u8; 32],
-    };
-
-    let mut emitter = audit_emit::emitter::Emitter::open(audit_path, model)
+    let mut emitter = audit_emit::emitter::Emitter::open_existing(audit_path)
         .map_err(|e| CliError::Audit(format!("cannot open emitter: {e}")))?;
 
     let sealed = if let Some(blob_path) = blob_file {

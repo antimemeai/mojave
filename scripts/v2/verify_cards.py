@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
-"""Verify audit chain integrity and run card provenance.
+"""Verify audit chain *structural* integrity and run card provenance.
 
-First-draft verifier. Checks:
-  1. Chain integrity — sequential seq numbers, parent_hash linkage
+IMPORTANT: This is a structural-only verifier. It checks JSON linkage
+(parent_hash matches previous entry_hash, seq continuity, genesis presence)
+but does NOT recompute SHA-256 entry hashes. For cryptographic hash
+verification, use: mojave audit verify --chain <path>
+
+Checks:
+  1. Chain structure — genesis at index 0, parent_hash linkage, seq continuity
   2. Data hash verification — sha256 in audit events matches files on disk
   3. Lifecycle completeness — every eval.completed has a run_card.generated
   4. Run card ↔ chain tip — chain tips printed on cards exist in the chain
@@ -81,6 +86,14 @@ def check_chain_integrity(entries: list[dict]) -> list[str]:
                 f"first seen at index {seen_hashes[entry_hash]}"
             )
         seen_hashes[entry_hash] = i
+
+    for i in range(1, len(entries)):
+        prev_seq = entries[i - 1].get("base", {}).get("seq", 0)
+        curr_seq = entries[i].get("base", {}).get("seq", 0)
+        if curr_seq != prev_seq + 1:
+            issues.append(
+                f"FAIL: seq discontinuity at index {i}: expected {prev_seq + 1}, got {curr_seq}"
+            )
 
     if not issues:
         max_seq = max(e.get("base", {}).get("seq", 0) for e in entries)

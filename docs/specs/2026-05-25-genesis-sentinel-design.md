@@ -264,13 +264,14 @@ pub enum ChainFinding {
     // Genesis enforcement
     MissingGenesis,
     ChainedAtIndexZero,
-    GenesisNotAtIndexZero { index: usize },
-    DuplicateGenesis { index: usize },
     GenesisHashMismatch,
+    DuplicateGenesis { index: usize },
+    CanonicalEncodingFailed { index: usize, seq: u64 },
 }
 ```
 
-Replaces `NonGenesisAtIndexZero` with five more specific findings.
+Replaces `NonGenesisAtIndexZero` with six more specific findings. `CanonicalEncodingFailed`
+is emitted when an entry's canonical encoding cannot be computed (malformed entries).
 
 ### 4.2 Verification Walk
 
@@ -361,7 +362,7 @@ Wire through `as_str()`, `parse()`, `all()`.
 |--------|--------|-------------|
 | `SealedAuditEntry` struct -> enum | Genesis is structurally different from chained | Yes -- no production chains |
 | `ChainHead::new()` signature | Requires `ModelIdentity` | Yes -- essential |
-| `ChainFinding::NonGenesisAtIndexZero` removed | Replaced by five specific findings | Yes -- more precise |
+| `ChainFinding::NonGenesisAtIndexZero` removed | Replaced by six specific findings (incl. `CanonicalEncodingFailed`) | Yes -- more precise |
 | `compute_entry_hash` removed | Split into `compute_genesis_hash` / `compute_chained_hash` | Yes -- prevents misuse |
 | `GENESIS_SENTINEL` removed | Replaced by model hash | Yes -- the point |
 | chain.jsonl format | Tagged enum JSON | Yes -- no production chains |
