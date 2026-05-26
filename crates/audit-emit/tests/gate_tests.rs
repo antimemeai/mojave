@@ -1,15 +1,27 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+use audit_chain::model_identity::{ModelHashMethod, ModelIdentity};
 use audit_emit::emitter::Emitter;
 use audit_emit::gate::AuditGate;
 use audit_events::*;
 use std::collections::BTreeMap;
 use tempfile::tempdir;
 
+fn sample_model() -> ModelIdentity {
+    ModelIdentity {
+        name: "test-model".into(),
+        provider: "test-provider".into(),
+        version: None,
+        quantization: None,
+        hash_method: ModelHashMethod::StructuredDescriptor,
+        hash: [42u8; 32],
+    }
+}
+
 #[test]
 fn gate_resolve_emits_event_and_returns_inner() {
     let dir = tempdir().unwrap();
-    let mut emitter = Emitter::open(dir.path()).unwrap();
+    let mut emitter = Emitter::open(dir.path(), sample_model()).unwrap();
 
     let gate = AuditGate::new(
         42u64,
@@ -34,7 +46,7 @@ fn gate_resolve_emits_event_and_returns_inner() {
         .unwrap();
 
     assert_eq!(value, 42);
-    assert_eq!(emitter.chain_head().next_seq(), 1);
+    assert_eq!(emitter.chain_head().next_seq(), 2);
 }
 
 #[test]
@@ -65,7 +77,7 @@ fn gate_event_kind_accessor() {
     assert_eq!(gate.event_kind(), EventKind::PodCreated);
 
     let dir = tempdir().unwrap();
-    let mut emitter = Emitter::open(dir.path()).unwrap();
+    let mut emitter = Emitter::open(dir.path(), sample_model()).unwrap();
     gate.resolve(
         &mut emitter,
         Principal {

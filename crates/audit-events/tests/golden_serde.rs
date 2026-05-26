@@ -21,6 +21,7 @@ fn all_event_kinds_serialize_to_dot_notation() {
         (EventKind::KeyGenerated, "key.generated"),
         (EventKind::KeyLoaded, "key.loaded"),
         (EventKind::ChainVerified, "chain.verified"),
+        (EventKind::ChainGenesis, "chain.genesis"),
         (EventKind::AttestationCreated, "attestation.created"),
         (EventKind::ConfigChanged, "config.changed"),
         (EventKind::CircuitBreakerTripped, "circuit_breaker.tripped"),
@@ -38,7 +39,7 @@ fn all_event_kinds_serialize_to_dot_notation() {
 
 #[test]
 fn all_variants_covered_by_all() {
-    assert_eq!(EventKind::all().len(), 20);
+    assert_eq!(EventKind::all().len(), 21);
 }
 
 #[test]

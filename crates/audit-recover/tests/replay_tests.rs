@@ -1,10 +1,26 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use audit_chain::entry::{AuditEntryBuilder, Principal};
+use audit_chain::model_identity::{ModelHashMethod, ModelIdentity};
 use audit_chain::seal::ChainHead;
 use audit_recover::replay;
 use chrono::{TimeZone, Utc};
 use std::io::Write;
+
+fn sample_model() -> ModelIdentity {
+    ModelIdentity {
+        name: "test-model".into(),
+        provider: "test-provider".into(),
+        version: None,
+        quantization: None,
+        hash_method: ModelHashMethod::StructuredDescriptor,
+        hash: [42u8; 32],
+    }
+}
+
+fn fixed_time() -> chrono::DateTime<Utc> {
+    Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap()
+}
 
 fn sample_entry() -> audit_chain::entry::AuditEntry {
     AuditEntryBuilder::new()
@@ -16,16 +32,16 @@ fn sample_entry() -> audit_chain::entry::AuditEntry {
         .event("eval.started")
         .authorization("Allowed")
         .outcome("Succeeded")
-        .at(Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap())
+        .at(fixed_time())
         .detail(serde_json::json!({"trial": 1}))
         .build()
         .unwrap()
 }
 
 fn build_chain_jsonl(n: usize) -> String {
-    let mut head = ChainHead::new();
-    let mut lines = Vec::new();
-    for _ in 0..n {
+    let (mut head, genesis) = ChainHead::new(sample_model(), fixed_time()).unwrap();
+    let mut lines = vec![serde_json::to_string(&genesis).unwrap()];
+    for _ in 1..n {
         let sealed = head.link(sample_entry()).unwrap();
         lines.push(serde_json::to_string(&sealed).unwrap());
     }
@@ -36,7 +52,7 @@ fn build_chain_jsonl(n: usize) -> String {
 fn replay_empty_file() {
     let result = replay::replay_chain_str("").unwrap();
     assert_eq!(result.entry_count, 0);
-    assert_eq!(result.chain_head.next_seq(), 0);
+    assert!(result.chain_head.is_none());
 }
 
 #[test]
@@ -44,8 +60,9 @@ fn replay_valid_chain() {
     let jsonl = build_chain_jsonl(5);
     let result = replay::replay_chain_str(&jsonl).unwrap();
     assert_eq!(result.entry_count, 5);
-    assert_eq!(result.chain_head.next_seq(), 5);
-    assert!(result.chain_head.last_entry_hash().is_some());
+    let head = result.chain_head.unwrap();
+    assert_eq!(head.next_seq(), 5);
+    assert!(head.last_entry_hash().is_some());
 }
 
 #[test]

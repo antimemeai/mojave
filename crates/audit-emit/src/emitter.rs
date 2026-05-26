@@ -5,6 +5,7 @@ use audit_chain::entry::{
     AuditEntryBuilder, BlobLocation as ChainBlobLocation, BlobRef as ChainBlobRef,
     Principal as ChainPrincipal, ResourceRef as ChainResourceRef,
 };
+use audit_chain::model_identity::ModelIdentity;
 use audit_chain::seal::{ChainHead, SealedAuditEntry};
 use audit_events::{validate_tags, AuditEvent, BlobLocation};
 use audit_sign::signing::AuditSigner;
@@ -22,10 +23,11 @@ pub struct Emitter {
     config: EmitterConfig,
     lock_file: std::fs::File,
     audit_dir: PathBuf,
+    genesis_pending: Option<SealedAuditEntry>,
 }
 
 impl Emitter {
-    pub fn open(audit_dir: &Path) -> Result<Self, AuditError> {
+    pub fn open(audit_dir: &Path, model: ModelIdentity) -> Result<Self, AuditError> {
         std::fs::create_dir_all(audit_dir)?;
 
         let lock_path = audit_dir.join(".lock");
@@ -37,12 +39,71 @@ impl Emitter {
         lock_file.lock_exclusive()?;
 
         let chain_path = audit_dir.join("chain.jsonl");
-        let chain = if chain_path.exists() {
+        let (chain, genesis_pending) = if chain_path.exists() {
             let result = audit_recover::replay::replay_chain_file(&chain_path)?;
-            result.chain_head
+            match result.chain_head {
+                Some(head) => {
+                    Self::validate_model_identity(&chain_path, &model)?;
+                    (head, None)
+                }
+                None => {
+                    let (head, genesis) = ChainHead::new(model, chrono::Utc::now())?;
+                    (head, Some(genesis))
+                }
+            }
         } else {
-            ChainHead::new()
+            let (head, genesis) = ChainHead::new(model, chrono::Utc::now())?;
+            (head, Some(genesis))
         };
+
+        let blob_store = BlobStore::new(audit_dir.join("blobs"));
+
+        let mut emitter = Self {
+            chain,
+            chain_path: chain_path.clone(),
+            blob_store,
+            signer: None,
+            config: EmitterConfig::default(),
+            lock_file,
+            audit_dir: audit_dir.to_path_buf(),
+            genesis_pending,
+        };
+
+        if let Some(genesis) = emitter.genesis_pending.take() {
+            let line = serde_json::to_string(&genesis)?;
+            let mut file = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&chain_path)?;
+            writeln!(file, "{line}")?;
+            file.sync_all()?;
+        }
+
+        Ok(emitter)
+    }
+
+    pub fn open_existing(audit_dir: &Path) -> Result<Self, AuditError> {
+        std::fs::create_dir_all(audit_dir)?;
+
+        let lock_path = audit_dir.join(".lock");
+        let lock_file = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(false)
+            .open(&lock_path)?;
+        lock_file.lock_exclusive()?;
+
+        let chain_path = audit_dir.join("chain.jsonl");
+        if !chain_path.exists() {
+            return Err(AuditError::BlobStore(
+                "no existing chain; use open() with ModelIdentity to create a new chain".into(),
+            ));
+        }
+
+        let result = audit_recover::replay::replay_chain_file(&chain_path)?;
+        let chain = result.chain_head.ok_or_else(|| {
+            AuditError::BlobStore("chain file exists but contains no valid entries".into())
+        })?;
 
         let blob_store = BlobStore::new(audit_dir.join("blobs"));
 
@@ -54,7 +115,29 @@ impl Emitter {
             config: EmitterConfig::default(),
             lock_file,
             audit_dir: audit_dir.to_path_buf(),
+            genesis_pending: None,
         })
+    }
+
+    fn validate_model_identity(chain_path: &Path, model: &ModelIdentity) -> Result<(), AuditError> {
+        let contents = std::fs::read_to_string(chain_path)?;
+        if let Some(first_line) = contents.lines().find(|l| !l.trim().is_empty()) {
+            if let Ok(entry) = serde_json::from_str::<SealedAuditEntry>(first_line) {
+                if let Some(stored_model) = entry.model_identity() {
+                    if stored_model.hash != model.hash {
+                        return Err(AuditError::BlobStore(format!(
+                            "model identity mismatch: chain genesis has model '{}' ({}), \
+                             but open() called with '{}' ({})",
+                            stored_model.name,
+                            hex_short(&stored_model.hash),
+                            model.name,
+                            hex_short(&model.hash),
+                        )));
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     pub fn with_signer(mut self, signer: Box<dyn AuditSigner>) -> Self {
@@ -177,7 +260,7 @@ impl Emitter {
 
             let att_dir = self.audit_dir.join("attestations");
             std::fs::create_dir_all(&att_dir)?;
-            std::fs::write(att_dir.join(format!("{}.cbor", sealed.base.seq)), &cbor)?;
+            std::fs::write(att_dir.join(format!("{}.cbor", sealed.seq())), &cbor)?;
         }
 
         Ok(sealed)
@@ -186,6 +269,16 @@ impl Emitter {
     pub fn chain_head(&self) -> &ChainHead {
         &self.chain
     }
+}
+
+fn hex_short(bytes: &[u8; 32]) -> String {
+    bytes[..8]
+        .iter()
+        .fold(String::with_capacity(16), |mut s, b| {
+            use std::fmt::Write;
+            let _ = write!(s, "{b:02x}");
+            s
+        })
 }
 
 impl Drop for Emitter {

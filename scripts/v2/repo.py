@@ -40,8 +40,16 @@ def audit_seal(
     run_id: str,
     eval_name: str,
     data_file: Path,
+    model_name: str,
+    model_provider: str,
+    model_hash: str,
+    model_hash_method: str = "StructuredDescriptor",
     actor: str = "generate_run_cards_v2.py",
 ) -> dict[str, Any] | None:
+    if model_hash == "00" * 32 or len(model_hash) != 64:
+        raise ValueError(
+            f"model_hash must be a 64-char hex string (not zero-hash), got: {model_hash!r}"
+        )
     data_sha256 = compute_file_sha256(data_file)
     seal_input = {
         "run_id": run_id,
@@ -50,6 +58,12 @@ def audit_seal(
         "data_file": str(data_file),
         "data_sha256": data_sha256,
         "actor": {"kind": "System", "id": actor},
+        "model": {
+            "name": model_name,
+            "provider": model_provider,
+            "hash_method": model_hash_method,
+            "hash": model_hash,
+        },
     }
     try:
         result = subprocess.run(

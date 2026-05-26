@@ -3,5 +3,6 @@
 
 pub mod canonical;
 pub mod entry;
+pub mod model_identity;
 pub mod seal;
 pub mod verify;
