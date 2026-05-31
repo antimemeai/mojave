@@ -65,6 +65,7 @@ pub struct AnalysisOutput {
     pub sobol_indices: Vec<SobolIndexEntry>,
     pub borgonovo_indices: Vec<BorgonovoIndexEntry>,
     pub sobol_diagnostics: SobolDiagnostics,
+    pub convergence_diagnostics: Vec<crate::diagnostics::SobolDiagnosticEntry>,
 }
 
 #[derive(Debug, Serialize)]
@@ -375,6 +376,11 @@ pub fn analyze(
     let sum_s1: f64 = s1.iter().sum();
     let sum_st: f64 = st.iter().sum();
 
+    let convergence_diags = crate::diagnostics::run_diagnostics(
+        &sobol_entries,
+        &crate::diagnostics::DiagnosticConfig::default(),
+    );
+
     let output = AnalysisOutput {
         eval: results.eval,
         model: results.model,
@@ -397,6 +403,7 @@ pub fn analyze(
             sum_s1: round4(sum_s1),
             sum_st: round4(sum_st),
         },
+        convergence_diagnostics: convergence_diags,
     };
 
     if let Some(parent) = output_path.parent() {
@@ -418,6 +425,15 @@ pub fn analyze(
             "    Dominant factor: {} (ST={:.4})",
             dominant.axis, dominant.st
         );
+    }
+    if !output.convergence_diagnostics.is_empty() {
+        eprintln!(
+            "    Convergence warnings: {}",
+            output.convergence_diagnostics.len()
+        );
+        for d in &output.convergence_diagnostics {
+            eprintln!("      - {}", d.message);
+        }
     }
     eprintln!("    -> {}", output_path.display());
 
