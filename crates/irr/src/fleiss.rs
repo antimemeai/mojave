@@ -1,3 +1,4 @@
+use crate::bootstrap::{bootstrap_ci, BootstrapError};
 use crate::types::{IrrResult, MetricLevel, RatingMatrix};
 use std::collections::BTreeMap;
 
@@ -106,4 +107,38 @@ pub fn kappa(matrix: &RatingMatrix) -> Result<IrrResult, FleissError> {
         n_raters: k,
         metric_level: Some(MetricLevel::Nominal),
     })
+}
+
+/// Fleiss' kappa with bootstrap confidence intervals.
+///
+/// Calls [`kappa`] for the point estimate, then runs [`bootstrap_ci`]
+/// with Fleiss' kappa as the statistic closure.
+pub fn kappa_with_ci(
+    matrix: &RatingMatrix,
+    n_resamples: usize,
+    confidence_level: f64,
+    seed: u64,
+) -> Result<IrrResult, FleissCiError> {
+    let point = kappa(matrix)?;
+    let ci = bootstrap_ci(
+        matrix,
+        |m| kappa(m).map(|r| r.value).map_err(|e| e.to_string()),
+        n_resamples,
+        confidence_level,
+        seed,
+    )?;
+    Ok(IrrResult {
+        ci_lower: Some(ci.ci_lower),
+        ci_upper: Some(ci.ci_upper),
+        ..point
+    })
+}
+
+/// Error type for Fleiss kappa with CI, combining Fleiss and bootstrap errors.
+#[derive(Debug, thiserror::Error)]
+pub enum FleissCiError {
+    #[error(transparent)]
+    Fleiss(#[from] FleissError),
+    #[error(transparent)]
+    Bootstrap(#[from] BootstrapError),
 }
