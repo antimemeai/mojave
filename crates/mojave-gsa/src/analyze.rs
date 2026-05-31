@@ -13,6 +13,7 @@ use ndarray::Array2;
 use salib_core::RngState;
 use salib_estimators::{
     estimate_borgonovo_delta, estimate_saltelli2010_from_outputs_with_bootstrap,
+    estimate_saltelli2010_from_outputs_with_second_order,
 };
 use salib_samplers::{build_saltelli_matrix, SobolSampler};
 use serde::{Deserialize, Serialize};
@@ -47,6 +48,8 @@ struct DesignInput {
     #[serde(rename = "N_base")]
     n_base: usize,
     k: usize,
+    #[serde(default)]
+    calc_second_order: bool,
     axes: Vec<AxisInput>,
 }
 
@@ -63,6 +66,8 @@ pub struct AnalysisOutput {
     pub n_cells: usize,
     pub aggregate: AggregateStats,
     pub sobol_indices: Vec<SobolIndexEntry>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub second_order_indices: Option<Vec<SecondOrderIndexEntry>>,
     pub borgonovo_indices: Vec<BorgonovoIndexEntry>,
     pub sobol_diagnostics: SobolDiagnostics,
 }
@@ -99,6 +104,14 @@ pub struct SobolIndexEntry {
     pub st_ci_low: f64,
     #[serde(rename = "ST_ci_high")]
     pub st_ci_high: f64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SecondOrderIndexEntry {
+    pub axis_i: String,
+    pub axis_j: String,
+    #[serde(rename = "S2")]
+    pub s2: f64,
 }
 
 #[derive(Debug, Serialize)]
@@ -140,7 +153,12 @@ pub fn analyze(
 
     let n_base = manifest.design.n_base;
     let k = manifest.design.k;
-    let expected_cells = n_base * (k + 2);
+    let calc_second_order = manifest.design.calc_second_order;
+    let expected_cells = if calc_second_order {
+        n_base * (2 * k + 2)
+    } else {
+        n_base * (k + 2)
+    };
     let axis_names: Vec<String> = manifest
         .design
         .axes
@@ -168,7 +186,7 @@ pub fn analyze(
 
     anyhow::ensure!(
         y.len() == expected_cells,
-        "incomplete output vector: got {} cells, expected {} (N={n_base}, k={k})",
+        "incomplete output vector: got {} cells, expected {} (N={n_base}, k={k}, second_order={calc_second_order})",
         y.len(),
         expected_cells
     );
@@ -182,6 +200,19 @@ pub fn analyze(
         let end = start + n;
         fab.push(y[start..end].to_vec());
     }
+
+    // Extract B_A evaluations if second-order was requested
+    let fba: Option<Vec<Vec<f64>>> = if calc_second_order {
+        let mut fba_vecs = Vec::with_capacity(k);
+        for j in 0..k {
+            let start = (2 + k + j) * n;
+            let end = start + n;
+            fba_vecs.push(y[start..end].to_vec());
+        }
+        Some(fba_vecs)
+    } else {
+        None
+    };
 
     // Use salib-rs canonical Sobol estimation with bootstrap CIs.
     let mut bootstrap_rng = RngState::from_seed(seed);
@@ -197,9 +228,19 @@ pub fn analyze(
     let s1_ci = &sobol_with_ci.first_order_ci;
     let st_ci = &sobol_with_ci.total_order_ci;
 
+    // Compute second-order indices if B_A data is available
+    let second_order_sobol = fba.as_ref().map(|fba_vecs| {
+        estimate_saltelli2010_from_outputs_with_second_order(&fa, &fb, &fab, fba_vecs)
+    });
+
     let mut rng2 = RngState::from_seed(seed);
-    let matrix = build_saltelli_matrix(&SobolSampler::minimal(2 * k), n_base, false, &mut rng2)
-        .with_context(|| "reconstructing Saltelli matrix for Borgonovo")?;
+    let matrix = build_saltelli_matrix(
+        &SobolSampler::minimal(2 * k),
+        n_base,
+        calc_second_order,
+        &mut rng2,
+    )
+    .with_context(|| "reconstructing Saltelli matrix for Borgonovo")?;
 
     let mut x_data: Vec<f64> = Vec::with_capacity(expected_cells * k);
     for i in 0..n {
@@ -214,6 +255,14 @@ pub fn analyze(
         for i in 0..n {
             let row = matrix.a_b[j].row(i);
             x_data.extend(row.iter());
+        }
+    }
+    if let Some(ref b_a) = matrix.b_a {
+        for j in 0..k {
+            for i in 0..n {
+                let row = b_a[j].row(i);
+                x_data.extend(row.iter());
+            }
         }
     }
     let x = Array2::from_shape_vec((expected_cells, k), x_data)
@@ -248,6 +297,30 @@ pub fn analyze(
 
     sobol_entries.sort_by(|a, b| b.st.partial_cmp(&a.st).unwrap_or(std::cmp::Ordering::Equal));
 
+    // Build second-order index entries if available
+    let second_order_entries = second_order_sobol.and_then(|sobol| {
+        sobol.second_order.map(|s2| {
+            let mut entries = Vec::new();
+            for i in 0..s2.len() {
+                for (jj, &s2_val) in s2[i].iter().enumerate() {
+                    let j = i + jj + 1;
+                    entries.push(SecondOrderIndexEntry {
+                        axis_i: axis_names[i].clone(),
+                        axis_j: axis_names[j].clone(),
+                        s2: round6(s2_val),
+                    });
+                }
+            }
+            // Sort by absolute S2 descending for readability
+            entries.sort_by(|a, b| {
+                b.s2.abs()
+                    .partial_cmp(&a.s2.abs())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+            entries
+        })
+    });
+
     let borgonovo_entries: Vec<BorgonovoIndexEntry> = axis_names
         .iter()
         .zip(borgonovo_result.delta.iter())
@@ -277,6 +350,7 @@ pub fn analyze(
             sd: sd.map(round6),
         },
         sobol_indices: sobol_entries,
+        second_order_indices: second_order_entries,
         borgonovo_indices: borgonovo_entries,
         sobol_diagnostics: SobolDiagnostics {
             sum_s1: round4(sum_s1),
@@ -591,6 +665,120 @@ mod tests {
         assert!(
             msg.contains("missing"),
             "error should mention missing: {msg}"
+        );
+    }
+
+    fn generate_test_inputs_second_order() -> (NamedTempFile, NamedTempFile, NamedTempFile) {
+        let mut axes_file = NamedTempFile::new().unwrap();
+        axes_file
+            .write_all(default_axes_config().as_bytes())
+            .unwrap();
+        axes_file.flush().unwrap();
+
+        let manifest_file = NamedTempFile::new().unwrap();
+        crate::manifest::generate_manifest_with_options(
+            axes_file.path(),
+            "test_eval_s2",
+            "test_model",
+            4,
+            default_seed(),
+            true, // calc_second_order
+            manifest_file.path(),
+        )
+        .unwrap();
+
+        let manifest_text = fs::read_to_string(manifest_file.path()).unwrap();
+        let manifest: serde_json::Value = serde_json::from_str(&manifest_text).unwrap();
+        let total_cells = manifest["total_cells"].as_u64().unwrap() as usize;
+
+        let mut cells = Vec::new();
+        for i in 0..total_cells {
+            let acc = 0.3 + 0.4 * (i as f64 / total_cells as f64);
+            cells.push(serde_json::json!({
+                "saltelli_index": i,
+                "accuracy": acc,
+                "cell_id": format!("c{i:05}")
+            }));
+        }
+        let results = serde_json::json!({
+            "eval": "test_eval_s2",
+            "model": "test_model",
+            "cells": cells,
+            "item_matrix": {}
+        });
+
+        let mut results_file = NamedTempFile::new().unwrap();
+        results_file
+            .write_all(serde_json::to_string_pretty(&results).unwrap().as_bytes())
+            .unwrap();
+        results_file.flush().unwrap();
+
+        (axes_file, manifest_file, results_file)
+    }
+
+    #[test]
+    fn test_second_order_produces_s2_indices() {
+        let (_axes, manifest, results) = generate_test_inputs_second_order();
+        let output = NamedTempFile::new().unwrap();
+
+        analyze(
+            manifest.path(),
+            results.path(),
+            50,
+            0.95,
+            default_seed(),
+            output.path(),
+        )
+        .unwrap();
+
+        let text = fs::read_to_string(output.path()).unwrap();
+        let analysis: serde_json::Value = serde_json::from_str(&text).unwrap();
+
+        // Should have second_order_indices field
+        let s2 = analysis["second_order_indices"].as_array().unwrap();
+        // k=6 factors => C(6,2) = 15 pairs
+        assert_eq!(s2.len(), 15);
+
+        // Each entry should have axis_i, axis_j, S2
+        for entry in s2 {
+            assert!(entry.get("axis_i").is_some());
+            assert!(entry.get("axis_j").is_some());
+            assert!(entry.get("S2").is_some());
+        }
+    }
+
+    #[test]
+    fn test_second_order_cell_count() {
+        let (_axes, manifest, _results) = generate_test_inputs_second_order();
+        let manifest_text = fs::read_to_string(manifest.path()).unwrap();
+        let mf: serde_json::Value = serde_json::from_str(&manifest_text).unwrap();
+        let total_cells = mf["total_cells"].as_u64().unwrap() as usize;
+        // N*(2k+2) = 4*(12+2) = 56
+        assert_eq!(total_cells, 4 * (2 * 6 + 2));
+    }
+
+    #[test]
+    fn test_first_order_no_s2_field() {
+        let (_axes, manifest, results) = generate_test_inputs();
+        let output = NamedTempFile::new().unwrap();
+
+        analyze(
+            manifest.path(),
+            results.path(),
+            50,
+            0.95,
+            default_seed(),
+            output.path(),
+        )
+        .unwrap();
+
+        let text = fs::read_to_string(output.path()).unwrap();
+        let analysis: serde_json::Value = serde_json::from_str(&text).unwrap();
+
+        // Without second_order, the field should be absent (skip_serializing_if)
+        assert!(
+            analysis.get("second_order_indices").is_none(),
+            "first-order only analysis should not have second_order_indices"
         );
     }
 

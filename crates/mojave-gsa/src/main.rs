@@ -35,6 +35,11 @@ enum Command {
         #[arg(long, default_value = "1024")]
         n_base: usize,
 
+        /// Enable second-order Sobol index computation (S2_ij).
+        /// Doubles the number of cells from N*(k+2) to N*(2k+2).
+        #[arg(long, default_value = "false")]
+        second_order: bool,
+
         #[arg(long, default_value = "mojave-gsa-default-seed-v1")]
         seed: String,
 
@@ -102,11 +107,20 @@ fn main() -> Result<()> {
             task,
             model,
             n_base,
+            second_order,
             seed,
             output,
         } => {
             let seed_bytes = seed_to_bytes(&seed);
-            manifest::generate_manifest(&axes_config, &task, &model, n_base, seed_bytes, &output)?;
+            manifest::generate_manifest_with_options(
+                &axes_config,
+                &task,
+                &model,
+                n_base,
+                seed_bytes,
+                second_order,
+                &output,
+            )?;
         }
         Command::Confseq {
             results,
