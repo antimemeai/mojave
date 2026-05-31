@@ -261,10 +261,7 @@ mod tests {
     #[test]
     fn infer_data_family_selects_bernoulli_for_binary() {
         let records: Vec<_> = (0..10).map(|_| make_binary_record(true)).collect();
-        assert_eq!(
-            super::infer_data_family(&records),
-            DataFamily::Bernoulli,
-        );
+        assert_eq!(super::infer_data_family(&records), DataFamily::Bernoulli,);
     }
 
     #[test]
@@ -272,7 +269,9 @@ mod tests {
         let records: Vec<_> = (0..10).map(|_| make_seq_record(0.5)).collect();
         assert_eq!(
             super::infer_data_family(&records),
-            DataFamily::Normal { known_variance: None },
+            DataFamily::Normal {
+                known_variance: None
+            },
         );
     }
 
