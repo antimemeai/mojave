@@ -10,9 +10,10 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 use ndarray::Array2;
-use rand::RngCore;
-use salib_core::{tree_sum, RngState};
-use salib_estimators::estimate_borgonovo_delta;
+use salib_core::RngState;
+use salib_estimators::{
+    estimate_borgonovo_delta, estimate_saltelli2010_from_outputs_with_bootstrap,
+};
 use salib_samplers::{build_saltelli_matrix, SobolSampler};
 use serde::{Deserialize, Serialize};
 
@@ -112,115 +113,18 @@ pub struct SobolDiagnostics {
     pub sum_st: f64,
 }
 
-/// Saltelli 2010 Eq c (first-order) + Jansen 1999 Eq f (total-order)
-/// computed directly from cached fa/fb/fab arrays.
-fn compute_sobol_from_cached(
-    fa: &[f64],
-    fb: &[f64],
-    fab: &[Vec<f64>],
-    n: usize,
-    d: usize,
-) -> (Vec<f64>, Vec<f64>, f64) {
-    let n_f = n as f64;
-
-    let f0 = tree_sum(fa) / n_f;
-    let fa_sq: Vec<f64> = fa.iter().map(|x| x * x).collect();
-    let d_var = tree_sum(&fa_sq) / n_f - f0 * f0;
-
-    let mut first_order = Vec::with_capacity(d);
-    let mut total_order = Vec::with_capacity(d);
-
-    for i in 0..d {
-        let cross: Vec<f64> = (0..n).map(|j| fb[j] * (fab[i][j] - fa[j])).collect();
-        let s_i = if d_var.abs() < 1e-30 {
-            0.0
-        } else {
-            tree_sum(&cross) / (n_f * d_var)
-        };
-        first_order.push(s_i);
-
-        let sq_diff: Vec<f64> = (0..n)
-            .map(|j| {
-                let diff = fa[j] - fab[i][j];
-                diff * diff
-            })
-            .collect();
-        let st_i = if d_var.abs() < 1e-30 {
-            0.0
-        } else {
-            tree_sum(&sq_diff) / (2.0 * n_f * d_var)
-        };
-        total_order.push(st_i);
-    }
-
-    (first_order, total_order, d_var)
-}
-
-fn bootstrap_sobol_cis(
-    fa: &[f64],
-    fb: &[f64],
-    fab: &[Vec<f64>],
-    n: usize,
-    d: usize,
-    resamples: usize,
-    confidence_level: f64,
-    rng: &mut RngState,
-) -> (Vec<(f64, f64)>, Vec<(f64, f64)>) {
-    let alpha = 1.0 - confidence_level;
-    let mut chacha = rng.clone().into_chacha();
-
-    let mut s1_samples: Vec<Vec<f64>> = vec![Vec::with_capacity(resamples); d];
-    let mut st_samples: Vec<Vec<f64>> = vec![Vec::with_capacity(resamples); d];
-
-    let mut idx = vec![0usize; n];
-
-    for _ in 0..resamples {
-        for slot in &mut idx {
-            *slot = (chacha.next_u32() as usize) % n;
-        }
-
-        let fa_re: Vec<f64> = idx.iter().map(|&j| fa[j]).collect();
-        let fb_re: Vec<f64> = idx.iter().map(|&j| fb[j]).collect();
-        let fab_re: Vec<Vec<f64>> = (0..d)
-            .map(|i| idx.iter().map(|&j| fab[i][j]).collect())
-            .collect();
-
-        let (s1, st, _) = compute_sobol_from_cached(&fa_re, &fb_re, &fab_re, n, d);
-        for i in 0..d {
-            s1_samples[i].push(s1[i]);
-            st_samples[i].push(st[i]);
-        }
-    }
-
-    let lo_pct = alpha / 2.0;
-    let hi_pct = 1.0 - alpha / 2.0;
-
-    let percentile = |samples: &mut Vec<f64>, p: f64| -> f64 {
-        samples.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-        let idx = ((p * samples.len() as f64).floor() as usize).min(samples.len() - 1);
-        samples[idx]
-    };
-
-    let mut s1_ci = Vec::with_capacity(d);
-    let mut st_ci = Vec::with_capacity(d);
-    for i in 0..d {
-        let lo = percentile(&mut s1_samples[i], lo_pct);
-        let hi = percentile(&mut s1_samples[i], hi_pct);
-        s1_ci.push((lo, hi));
-        let lo = percentile(&mut st_samples[i], lo_pct);
-        let hi = percentile(&mut st_samples[i], hi_pct);
-        st_ci.push((lo, hi));
-    }
-
-    *rng = RngState::snapshot(&chacha, rng);
-    (s1_ci, st_ci)
-}
+// Sobol estimation and bootstrap CIs now delegated to salib-rs canonical
+// implementations (estimate_saltelli2010_from_outputs and
+// estimate_saltelli2010_from_outputs_with_bootstrap) — deduplicating the
+// local code that was here previously. The salib-rs implementations use
+// tree_dot/tree_sum for bit-deterministic sums and linear percentile
+// interpolation (numpy-compatible) instead of the floor-based method.
 
 pub fn analyze(
     manifest_path: &Path,
     results_path: &Path,
     bootstrap_resamples: usize,
-    confidence_level: f64,
+    _confidence_level: f64,
     seed: [u8; 32],
     output_path: &Path,
 ) -> Result<()> {
@@ -279,24 +183,19 @@ pub fn analyze(
         fab.push(y[start..end].to_vec());
     }
 
-    let (s1, st, _total_variance) = compute_sobol_from_cached(&fa, &fb, &fab, n, k);
-
-    let mut rng = RngState::from_seed(seed);
-    let sampler = SobolSampler::minimal(2 * k);
-    let _ = build_saltelli_matrix(&sampler, n_base, false, &mut rng)
-        .with_context(|| "reconstructing Saltelli matrix for RNG advancement")?;
-
-    let mut bootstrap_rng = rng.fork(b"bootstrap-sobol");
-    let (s1_ci, st_ci) = bootstrap_sobol_cis(
+    // Use salib-rs canonical Sobol estimation with bootstrap CIs.
+    let mut bootstrap_rng = RngState::from_seed(seed);
+    let sobol_with_ci = estimate_saltelli2010_from_outputs_with_bootstrap(
         &fa,
         &fb,
         &fab,
-        n,
-        k,
         bootstrap_resamples,
-        confidence_level,
         &mut bootstrap_rng,
     );
+    let s1 = &sobol_with_ci.indices.first_order;
+    let st = &sobol_with_ci.indices.total_order;
+    let s1_ci = &sobol_with_ci.first_order_ci;
+    let st_ci = &sobol_with_ci.total_order_ci;
 
     let mut rng2 = RngState::from_seed(seed);
     let matrix = build_saltelli_matrix(&SobolSampler::minimal(2 * k), n_base, false, &mut rng2)
@@ -422,6 +321,7 @@ fn round6(v: f64) -> f64 {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use salib_estimators::estimate_saltelli2010_from_outputs;
     use std::io::Write;
     use tempfile::NamedTempFile;
 
@@ -695,20 +595,20 @@ mod tests {
     }
 
     #[test]
-    fn test_compute_sobol_from_cached_constant_output() {
+    fn test_salib_sobol_from_outputs_constant_output() {
         let n = 8;
         let d = 3;
         let fa = vec![0.5; n];
         let fb = vec![0.5; n];
         let fab = vec![vec![0.5; n]; d];
-        let (s1, st, var) = compute_sobol_from_cached(&fa, &fb, &fab, n, d);
+        let indices = estimate_saltelli2010_from_outputs(&fa, &fb, &fab);
         assert!(
-            var.abs() < 1e-15,
+            indices.total_variance.abs() < 1e-15,
             "variance should be ~0 for constant output"
         );
         for i in 0..d {
-            assert_eq!(s1[i], 0.0);
-            assert_eq!(st[i], 0.0);
+            assert_eq!(indices.first_order[i], 0.0);
+            assert_eq!(indices.total_order[i], 0.0);
         }
     }
 }
