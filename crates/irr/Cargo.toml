@@ -54,5 +54,9 @@ name = "bootstrap_ci_wiring_tck"
 harness = false
 
 [[test]]
+name = "msa_tck"
+harness = false
+
+[[test]]
 name = "bland_altman_tck"
 harness = false
