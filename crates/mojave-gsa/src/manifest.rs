@@ -59,12 +59,27 @@ fn discretize(value: f64, n_levels: usize) -> usize {
     idx.min(n_levels - 1)
 }
 
+/// Convenience wrapper that generates a manifest with `calc_second_order=false`.
+/// Used by existing tests and the backward-compatible interface.
+#[allow(dead_code)]
 pub fn generate_manifest(
     axes_config_path: &Path,
     task: &str,
     model: &str,
     n_base: usize,
     seed: [u8; 32],
+    output_path: &Path,
+) -> Result<()> {
+    generate_manifest_with_options(axes_config_path, task, model, n_base, seed, false, output_path)
+}
+
+pub fn generate_manifest_with_options(
+    axes_config_path: &Path,
+    task: &str,
+    model: &str,
+    n_base: usize,
+    seed: [u8; 32],
+    calc_second_order: bool,
     output_path: &Path,
 ) -> Result<()> {
     let config_text = fs::read_to_string(axes_config_path)
@@ -77,7 +92,7 @@ pub fn generate_manifest(
 
     let sampler = SobolSampler::minimal(2 * k);
     let mut rng = RngState::from_seed(seed);
-    let matrix = build_saltelli_matrix(&sampler, n_base, false, &mut rng)
+    let matrix = build_saltelli_matrix(&sampler, n_base, calc_second_order, &mut rng)
         .with_context(|| "building Saltelli matrix")?;
 
     let n = matrix.n;
@@ -99,6 +114,7 @@ pub fn generate_manifest(
         }
     };
 
+    // A matrix rows
     for i in 0..n {
         let row = matrix.a.row(i);
         let row_slice = row
@@ -108,6 +124,7 @@ pub fn generate_manifest(
         cell_idx += 1;
     }
 
+    // B matrix rows
     for i in 0..n {
         let row = matrix.b.row(i);
         let row_slice = row
@@ -117,6 +134,7 @@ pub fn generate_manifest(
         cell_idx += 1;
     }
 
+    // A_B[j] matrices (for S1, ST)
     for j in 0..k {
         for i in 0..n {
             let row = matrix.a_b[j].row(i);
@@ -125,6 +143,20 @@ pub fn generate_manifest(
                 .with_context(|| format!("A_B[{j}] row not contiguous"))?;
             cells.push(make_cell(row_slice, cell_idx));
             cell_idx += 1;
+        }
+    }
+
+    // B_A[j] matrices (for S2, only when calc_second_order=true)
+    if let Some(ref b_a) = matrix.b_a {
+        for (j, b_a_j) in b_a.iter().enumerate() {
+            for i in 0..n {
+                let row = b_a_j.row(i);
+                let row_slice = row
+                    .as_slice()
+                    .with_context(|| format!("B_A[{j}] row not contiguous"))?;
+                cells.push(make_cell(row_slice, cell_idx));
+                cell_idx += 1;
+            }
         }
     }
 
@@ -138,7 +170,7 @@ pub fn generate_manifest(
             name: "saltelli_radial".to_string(),
             n_base,
             k,
-            calc_second_order: false,
+            calc_second_order,
             seed_hex: hex::encode(seed),
             axes: config
                 .axes

@@ -19,18 +19,23 @@ impl SequentialInstrument {
             return (Vec::new(), None);
         }
 
+        let family = infer_data_family(records);
         let msprt_config = MsprtConfig {
             theta_0: 0.0,
             mixing_variance: config.sequential.mixing_variance,
-            family: DataFamily::Normal {
-                known_variance: None,
-            },
+            family,
             max_samples: None,
         };
 
         let mut monitor = match AnytimeMonitor::new(msprt_config, config.sequential.alpha) {
             Ok(m) => m,
-            Err(_) => return (Vec::new(), None),
+            Err(e) => {
+                eprintln!(
+                    "[sequential] AnytimeMonitor::new failed for series {:?}: {e}",
+                    series
+                );
+                return (Vec::new(), None);
+            }
         };
 
         let mut last_snapshot = None;
@@ -38,7 +43,13 @@ impl SequentialInstrument {
             let value = outcome_to_f64(&record.outcome);
             match monitor.update(value) {
                 Ok(snap) => last_snapshot = Some(snap),
-                Err(_) => continue,
+                Err(e) => {
+                    eprintln!(
+                        "[sequential] monitor.update failed for series {:?}: {e}",
+                        series
+                    );
+                    continue;
+                }
             }
         }
 
@@ -83,6 +94,19 @@ impl SequentialInstrument {
         }
 
         (decisions, Some(summary))
+    }
+}
+
+fn infer_data_family(records: &[TrialRecord]) -> DataFamily {
+    let all_binary = records
+        .iter()
+        .all(|r| matches!(r.outcome, eval_core::Outcome::Binary(_)));
+    if all_binary {
+        DataFamily::Bernoulli
+    } else {
+        DataFamily::Normal {
+            known_variance: None,
+        }
     }
 }
 
@@ -212,6 +236,54 @@ mod tests {
         assert!(
             !summary.stopped,
             "summary.stopped should be false for weak signal"
+        );
+    }
+
+    #[test]
+    fn binary_outcomes_use_bernoulli_family() {
+        let series = SeriesKey {
+            task_id: "t".into(),
+            agent_id: "a".into(),
+            scorer: None,
+        };
+        let config = AnalysisConfig::default();
+        let instrument = SequentialInstrument;
+
+        let binary_records: Vec<_> = (0..100).map(|_| make_binary_record(true)).collect();
+        let score_records: Vec<_> = (0..100).map(|_| make_seq_record(1.0)).collect();
+
+        let (_, binary_summary) = instrument.run(&series, &binary_records, &config);
+        let (_, score_summary) = instrument.run(&series, &score_records, &config);
+
+        let binary_ci = binary_summary.expect("binary summary").ci;
+        let score_ci = score_summary.expect("score summary").ci;
+
+        let binary_width = binary_ci.1 - binary_ci.0;
+        let score_width = score_ci.1 - score_ci.0;
+
+        // Binary uses sigma=0.5 (Bernoulli). Score(1.0) has zero variance via Welford,
+        // so Normal(unknown) gives a tiny CI. Binary CI must be wider.
+        assert!(
+            binary_width > score_width,
+            "Binary CI width ({binary_width:.4}) should exceed Score CI width ({score_width:.4}) \
+             because Bernoulli uses sigma=0.5"
+        );
+    }
+
+    #[test]
+    fn infer_data_family_selects_bernoulli_for_binary() {
+        let records: Vec<_> = (0..10).map(|_| make_binary_record(true)).collect();
+        assert_eq!(super::infer_data_family(&records), DataFamily::Bernoulli,);
+    }
+
+    #[test]
+    fn infer_data_family_selects_normal_for_score() {
+        let records: Vec<_> = (0..10).map(|_| make_seq_record(0.5)).collect();
+        assert_eq!(
+            super::infer_data_family(&records),
+            DataFamily::Normal {
+                known_variance: None
+            },
         );
     }
 

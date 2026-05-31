@@ -1,3 +1,4 @@
+use crate::bootstrap::{bootstrap_ci, BootstrapError};
 use crate::types::{IrrResult, MetricLevel, RatingMatrix};
 
 #[derive(Debug, thiserror::Error)]
@@ -206,4 +207,68 @@ pub fn linear_weight(a: u32, b: u32) -> f64 {
 pub fn quadratic_weight(a: u32, b: u32) -> f64 {
     let diff = a as f64 - b as f64;
     diff * diff
+}
+
+/// Cohen's kappa with bootstrap confidence intervals.
+///
+/// Calls [`kappa_from_matrix`] for the point estimate, then runs
+/// [`bootstrap_ci`] with kappa as the statistic closure.
+pub fn kappa_with_ci(
+    matrix: &RatingMatrix,
+    n_resamples: usize,
+    confidence_level: f64,
+    seed: u64,
+) -> Result<IrrResult, CohenCiError> {
+    let point = kappa_from_matrix(matrix)?;
+    let ci = bootstrap_ci(
+        matrix,
+        |m| kappa_from_matrix(m).map(|r| r.value).map_err(|e| e.to_string()),
+        n_resamples,
+        confidence_level,
+        seed,
+    )?;
+    Ok(IrrResult {
+        ci_lower: Some(ci.ci_lower),
+        ci_upper: Some(ci.ci_upper),
+        ..point
+    })
+}
+
+/// Cohen's weighted kappa with bootstrap confidence intervals.
+///
+/// The weight function must be `Clone`-able (or use a function pointer).
+pub fn weighted_kappa_with_ci(
+    matrix: &RatingMatrix,
+    weight_fn: fn(u32, u32) -> f64,
+    level: MetricLevel,
+    n_resamples: usize,
+    confidence_level: f64,
+    seed: u64,
+) -> Result<IrrResult, CohenCiError> {
+    let point = weighted_kappa_from_matrix(matrix, weight_fn, level)?;
+    let ci = bootstrap_ci(
+        matrix,
+        |m| {
+            weighted_kappa_from_matrix(m, weight_fn, level)
+                .map(|r| r.value)
+                .map_err(|e| e.to_string())
+        },
+        n_resamples,
+        confidence_level,
+        seed,
+    )?;
+    Ok(IrrResult {
+        ci_lower: Some(ci.ci_lower),
+        ci_upper: Some(ci.ci_upper),
+        ..point
+    })
+}
+
+/// Error type for Cohen kappa with CI, combining Cohen and bootstrap errors.
+#[derive(Debug, thiserror::Error)]
+pub enum CohenCiError {
+    #[error(transparent)]
+    Cohen(#[from] CohenError),
+    #[error(transparent)]
+    Bootstrap(#[from] BootstrapError),
 }

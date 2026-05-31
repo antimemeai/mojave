@@ -24,7 +24,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from audit import emit as audit
+from audit_emit import emit as audit
 from inspect_ai._util.registry import registry_lookup
 from nshot import N_SHOT_FRACS, draw_exemplar_pool, serialize_pool
 
@@ -140,10 +140,11 @@ def main() -> None:
 
     print("Sealing into audit chain...", file=sys.stderr)
     audit(
-        "pre_registration.sealed",
+        "run_card.sealed",
         resource_kind="pre_registration",
         resource_id=pre_reg["study_id"],
         detail={
+            "kind": "pre_registration",
             "task": args.task,
             "pre_registration_sha256": pre_reg_hash,
             "exemplar_pool_sha256": pool_meta["pool_sha256"],
