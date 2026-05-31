@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use crate::bootstrap::{bootstrap_ci, BootstrapError};
 use crate::categorical_agreement_weights::{WeightMatrix, WeightScheme};
 use crate::types::{IrrResult, MetricLevel, RatingMatrix};
 
@@ -239,4 +240,46 @@ fn weights_match(a: &WeightMatrix, b: &WeightMatrix) -> bool {
         }
     }
     true
+}
+
+/// Gwet's AC with bootstrap confidence intervals (AC1 when weights=None).
+///
+/// Calls [`ac`] for the point estimate, then runs [`bootstrap_ci`]
+/// with AC as the statistic closure.
+pub fn ac_with_ci(
+    matrix: &RatingMatrix,
+    weights: Option<&WeightMatrix>,
+    n_resamples: usize,
+    confidence_level: f64,
+    seed: u64,
+) -> Result<IrrResult, GwetCiError> {
+    let point = ac(matrix, weights)?;
+
+    // Clone the weight matrix so the closure can own it.
+    let weights_owned = weights.cloned();
+    let ci = bootstrap_ci(
+        matrix,
+        |m| {
+            ac(m, weights_owned.as_ref())
+                .map(|r| r.value)
+                .map_err(|e| e.to_string())
+        },
+        n_resamples,
+        confidence_level,
+        seed,
+    )?;
+    Ok(IrrResult {
+        ci_lower: Some(ci.ci_lower),
+        ci_upper: Some(ci.ci_upper),
+        ..point
+    })
+}
+
+/// Error type for Gwet AC with CI.
+#[derive(Debug, thiserror::Error)]
+pub enum GwetCiError {
+    #[error(transparent)]
+    Gwet(#[from] GwetError),
+    #[error(transparent)]
+    Bootstrap(#[from] BootstrapError),
 }

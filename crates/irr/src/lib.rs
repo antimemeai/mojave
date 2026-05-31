@@ -7,6 +7,8 @@ pub mod family_stratification;
 pub mod fleiss;
 pub mod gwet;
 pub mod krippendorff;
+pub mod mandel;
+pub mod msa;
 pub mod preference_leakage;
 pub mod types;
 

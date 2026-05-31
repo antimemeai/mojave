@@ -1,3 +1,4 @@
+use crate::bootstrap::{bootstrap_ci, BootstrapError};
 use crate::types::{IrrResult, MetricLevel, RatingMatrix};
 use std::collections::BTreeMap;
 
@@ -108,6 +109,45 @@ pub fn alpha(
         n_raters: matrix.n_raters(),
         metric_level: Some(level),
     })
+}
+
+/// Krippendorff's alpha with bootstrap confidence intervals.
+///
+/// Calls [`alpha`] for the point estimate, then runs [`bootstrap_ci`]
+/// with alpha as the statistic closure.
+pub fn alpha_with_ci(
+    matrix: &RatingMatrix,
+    level: MetricLevel,
+    n_resamples: usize,
+    confidence_level: f64,
+    seed: u64,
+) -> Result<IrrResult, KrippendorffCiError> {
+    let point = alpha(matrix, Some(level))?;
+    let ci = bootstrap_ci(
+        matrix,
+        |m| {
+            alpha(m, Some(level))
+                .map(|r| r.value)
+                .map_err(|e| e.to_string())
+        },
+        n_resamples,
+        confidence_level,
+        seed,
+    )?;
+    Ok(IrrResult {
+        ci_lower: Some(ci.ci_lower),
+        ci_upper: Some(ci.ci_upper),
+        ..point
+    })
+}
+
+/// Error type for Krippendorff alpha with CI.
+#[derive(Debug, thiserror::Error)]
+pub enum KrippendorffCiError {
+    #[error(transparent)]
+    Krippendorff(#[from] KrippendorffError),
+    #[error(transparent)]
+    Bootstrap(#[from] BootstrapError),
 }
 
 fn compute_distance_matrix(values: &[u32], marginals: &[f64], level: MetricLevel) -> Vec<Vec<f64>> {
