@@ -143,6 +143,11 @@ pub fn analyze(
     seed: [u8; 32],
     output_path: &Path,
 ) -> Result<()> {
+    anyhow::ensure!(
+        confidence_level > 0.0 && confidence_level < 1.0,
+        "confidence_level must be in (0, 1), got {confidence_level}"
+    );
+
     let manifest_text = fs::read_to_string(manifest_path)
         .with_context(|| format!("reading manifest: {}", manifest_path.display()))?;
     let manifest: ManifestInput =
@@ -288,12 +293,13 @@ pub fn analyze(
     let borgonovo_result = estimate_borgonovo_delta(x.view(), &y)
         .map_err(|e| anyhow::anyhow!("Borgonovo estimation failed: {e}"))?;
 
-    let mean_acc = y.iter().sum::<f64>() / y.len() as f64;
+    let mean_acc = salib_core::tree_sum(&y) / y.len() as f64;
     let min_acc = y.iter().cloned().fold(f64::INFINITY, f64::min);
     let max_acc = y.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
     let spread = max_acc - min_acc;
     let sd = if y.len() > 1 {
-        let variance = y.iter().map(|v| (v - mean_acc).powi(2)).sum::<f64>() / (y.len() - 1) as f64;
+        let deviations: Vec<f64> = y.iter().map(|v| (v - mean_acc).powi(2)).collect();
+        let variance = salib_core::tree_sum(&deviations) / (y.len() - 1) as f64;
         Some(variance.sqrt())
     } else {
         None
@@ -875,6 +881,56 @@ mod tests {
             analysis.get("second_order_indices").is_none(),
             "first-order only analysis should not have second_order_indices"
         );
+    }
+
+    #[test]
+    fn test_confidence_level_validation_zero() {
+        let (_axes, manifest, results) = generate_test_inputs();
+        let output = NamedTempFile::new().unwrap();
+        let err = analyze(
+            manifest.path(),
+            results.path(),
+            100,
+            0.0,
+            default_seed(),
+            output.path(),
+        );
+        assert!(err.is_err());
+        let msg = format!("{}", err.err().unwrap());
+        assert!(
+            msg.contains("confidence_level"),
+            "error should mention confidence_level: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_confidence_level_validation_one() {
+        let (_axes, manifest, results) = generate_test_inputs();
+        let output = NamedTempFile::new().unwrap();
+        let err = analyze(
+            manifest.path(),
+            results.path(),
+            100,
+            1.0,
+            default_seed(),
+            output.path(),
+        );
+        assert!(err.is_err());
+    }
+
+    #[test]
+    fn test_confidence_level_validation_negative() {
+        let (_axes, manifest, results) = generate_test_inputs();
+        let output = NamedTempFile::new().unwrap();
+        let err = analyze(
+            manifest.path(),
+            results.path(),
+            100,
+            -0.5,
+            default_seed(),
+            output.path(),
+        );
+        assert!(err.is_err());
     }
 
     #[test]
