@@ -1,3 +1,4 @@
+use crate::types::SequentialSummary;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -87,6 +88,26 @@ impl QmuAssessment {
             acceptance_limit,
             decision,
         }
+    }
+
+    /// Construct a QMU assessment from pipeline outputs.
+    ///
+    /// Derives estimate and expanded uncertainty from the confidence interval
+    /// in a [`SequentialSummary`]:
+    /// - estimate = (ci_lo + ci_hi) / 2
+    /// - expanded_uncertainty = (ci_hi - ci_lo) / 2
+    ///
+    /// This is the primary composition point connecting the sequential testing
+    /// pipeline to the QMU decision framework.
+    pub fn from_pipeline(
+        sequential: &SequentialSummary,
+        threshold: f64,
+        guard_band: Option<f64>,
+    ) -> Self {
+        let (ci_lo, ci_hi) = sequential.ci;
+        let estimate = (ci_lo + ci_hi) / 2.0;
+        let expanded_uncertainty = (ci_hi - ci_lo) / 2.0;
+        Self::evaluate(estimate, expanded_uncertainty, threshold, guard_band)
     }
 }
 

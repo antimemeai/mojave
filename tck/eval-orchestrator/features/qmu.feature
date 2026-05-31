@@ -80,3 +80,35 @@ Feature: QMU Confidence Ratio and JCGM 106 conformity assessment
     When I compute the assessment with guard_band=0.0
     And I compute the assessment with no guard band
     Then both decisions are identical
+
+  # Pipeline composition: QMU from SequentialSummary CI
+
+  Scenario: from_pipeline computes QMU from confidence interval
+    Given a SequentialSummary with ci=(0.78, 0.86) and threshold=0.70
+    When I construct a QMU assessment via from_pipeline
+    Then estimate is 0.82
+    And expanded_uncertainty is 0.04
+    And margin is 0.12
+    And confidence_ratio is 3.0
+    And the decision is Accept
+
+  Scenario: from_pipeline with guard band triggers investigate
+    Given a SequentialSummary with ci=(0.68, 0.76) and threshold=0.70
+    And a guard band width of 0.04
+    When I construct a QMU assessment via from_pipeline
+    Then estimate is 0.72
+    And expanded_uncertainty is 0.04
+    And the decision is Investigate
+
+  Scenario: from_pipeline preserves evaluate semantics
+    Given a SequentialSummary with ci=(0.60, 0.68) and threshold=0.70
+    When I construct a QMU assessment via from_pipeline
+    Then margin is -0.06
+    And the decision is Reject
+
+  Scenario: from_pipeline with degenerate CI (zero width)
+    Given a SequentialSummary with ci=(0.80, 0.80) and threshold=0.70
+    When I construct a QMU assessment via from_pipeline
+    Then expanded_uncertainty is 0.0
+    And confidence_ratio is positive infinity
+    And the decision is Accept

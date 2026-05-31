@@ -6,6 +6,7 @@
 //! Sources: Pilch et al. 2006 SAND2006-5001, JCGM 106:2012.
 
 use eval_orchestrator::qmu::{ConformityDecision, QmuAssessment};
+use eval_orchestrator::{SequentialSummary, SeriesKey};
 
 // ---------------------------------------------------------------------------
 // Gate 1: Textbook reproduction
@@ -162,4 +163,87 @@ fn serde_roundtrip() {
     let json = serde_json::to_string(&a).unwrap();
     let back: QmuAssessment = serde_json::from_str(&json).unwrap();
     assert!((back.confidence_ratio - a.confidence_ratio).abs() < 1e-10);
+}
+
+// ---------------------------------------------------------------------------
+// C2: Pipeline composition — from_pipeline()
+// ---------------------------------------------------------------------------
+
+fn make_sequential_summary(ci_lo: f64, ci_hi: f64) -> SequentialSummary {
+    SequentialSummary {
+        series: SeriesKey {
+            task_id: "task".into(),
+            agent_id: "agent".into(),
+            scorer: None,
+        },
+        n_observations: 200,
+        current_estimate: (ci_lo + ci_hi) / 2.0,
+        ci: (ci_lo, ci_hi),
+        evidence: 100.0,
+        stopped: true,
+    }
+}
+
+#[test]
+fn from_pipeline_clear_accept() {
+    // CI = (0.78, 0.86) → estimate=0.82, U=0.04, threshold=0.70
+    // margin=0.12, CR=3.0, CI lower bound 0.78 > 0.70 → Accept
+    let summary = make_sequential_summary(0.78, 0.86);
+    let a = QmuAssessment::from_pipeline(&summary, 0.70, None);
+    assert!((a.estimate - 0.82).abs() < 1e-10);
+    assert!((a.expanded_uncertainty - 0.04).abs() < 1e-10);
+    assert!((a.margin - 0.12).abs() < 1e-10);
+    assert!((a.confidence_ratio - 3.0).abs() < 1e-10);
+    assert!(matches!(a.decision, ConformityDecision::Accept));
+}
+
+#[test]
+fn from_pipeline_with_guard_band_investigate() {
+    // CI = (0.68, 0.76) → estimate=0.72, U=0.04, threshold=0.70, guard=0.04
+    // acceptance_limit=0.74, estimate-U=0.68 < 0.74 → Investigate
+    let summary = make_sequential_summary(0.68, 0.76);
+    let a = QmuAssessment::from_pipeline(&summary, 0.70, Some(0.04));
+    assert!((a.estimate - 0.72).abs() < 1e-10);
+    assert!((a.expanded_uncertainty - 0.04).abs() < 1e-10);
+    assert!(matches!(a.decision, ConformityDecision::Investigate { .. }));
+}
+
+#[test]
+fn from_pipeline_clear_reject() {
+    // CI = (0.60, 0.68) → estimate=0.64, U=0.04, threshold=0.70
+    // estimate+U=0.68 < 0.70 → Reject
+    let summary = make_sequential_summary(0.60, 0.68);
+    let a = QmuAssessment::from_pipeline(&summary, 0.70, None);
+    assert!((a.margin - (-0.06)).abs() < 1e-10);
+    assert!(matches!(a.decision, ConformityDecision::Reject));
+}
+
+#[test]
+fn from_pipeline_degenerate_ci() {
+    // CI = (0.80, 0.80) → estimate=0.80, U=0.0, threshold=0.70
+    // Zero uncertainty, positive margin → Accept with infinite CR
+    let summary = make_sequential_summary(0.80, 0.80);
+    let a = QmuAssessment::from_pipeline(&summary, 0.70, None);
+    assert!((a.expanded_uncertainty).abs() < 1e-10);
+    assert!(a.confidence_ratio.is_infinite() && a.confidence_ratio > 0.0);
+    assert!(matches!(a.decision, ConformityDecision::Accept));
+}
+
+#[test]
+fn from_pipeline_matches_evaluate() {
+    // from_pipeline should produce identical results to evaluate with
+    // the same derived parameters.
+    let summary = make_sequential_summary(0.75, 0.85);
+    let from_pipe = QmuAssessment::from_pipeline(&summary, 0.70, Some(0.02));
+    let direct = QmuAssessment::evaluate(0.80, 0.05, 0.70, Some(0.02));
+    assert!((from_pipe.estimate - direct.estimate).abs() < 1e-10);
+    assert!(
+        (from_pipe.expanded_uncertainty - direct.expanded_uncertainty).abs() < 1e-10
+    );
+    assert!((from_pipe.margin - direct.margin).abs() < 1e-10);
+    assert!((from_pipe.confidence_ratio - direct.confidence_ratio).abs() < 1e-10);
+    assert_eq!(
+        std::mem::discriminant(&from_pipe.decision),
+        std::mem::discriminant(&direct.decision)
+    );
 }
