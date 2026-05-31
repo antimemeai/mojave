@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 /// Error type for Mandel h/k computations.
 #[derive(Debug, thiserror::Error)]
 pub enum MandelError {
-    #[error("need at least 3 configurations, got {0}")]
+    #[error("need at least 5 configurations (AIAG MSA ndc>=5), got {0}")]
     TooFewConfigurations(usize),
     #[error("configuration {index} has no replicates")]
     EmptyConfiguration { index: usize },
@@ -61,7 +61,7 @@ pub struct MandelStatistics {
 /// - Wilrich (2013) "Critical values of Mandel's h and k statistics"
 pub fn mandel_hk(configs: &[&[f64]], alpha: f64) -> Result<MandelStatistics, MandelError> {
     let p = configs.len();
-    if p < 3 {
+    if p < 5 {
         return Err(MandelError::TooFewConfigurations(p));
     }
     if !(0.0 < alpha && alpha < 1.0) {
@@ -248,4 +248,51 @@ fn f_quantile_approx(p: f64, df1: f64, df2: f64) -> f64 {
     }
 
     (chi2_1 / df1) / (chi2_2 / df2)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejects_fewer_than_5_configurations() {
+        // 3 configs: should fail now that minimum is 5 (AIAG MSA ndc>=5)
+        let c1 = [1.0, 2.0, 3.0];
+        let c2 = [1.1, 2.1, 3.1];
+        let c3 = [1.2, 2.2, 3.2];
+        let configs: Vec<&[f64]> = vec![&c1, &c2, &c3];
+        let result = mandel_hk(&configs, 0.05);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            MandelError::TooFewConfigurations(3)
+        ));
+    }
+
+    #[test]
+    fn rejects_4_configurations() {
+        let c1 = [1.0, 2.0, 3.0];
+        let c2 = [1.1, 2.1, 3.1];
+        let c3 = [1.2, 2.2, 3.2];
+        let c4 = [1.3, 2.3, 3.3];
+        let configs: Vec<&[f64]> = vec![&c1, &c2, &c3, &c4];
+        let result = mandel_hk(&configs, 0.05);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            MandelError::TooFewConfigurations(4)
+        ));
+    }
+
+    #[test]
+    fn accepts_5_configurations() {
+        let c1 = [10.1, 10.3, 10.2, 10.0];
+        let c2 = [10.0, 10.2, 10.1, 10.3];
+        let c3 = [14.0, 14.2, 14.1, 13.9];
+        let c4 = [10.2, 10.0, 10.1, 10.3];
+        let c5 = [10.1, 10.2, 10.0, 10.3];
+        let configs: Vec<&[f64]> = vec![&c1, &c2, &c3, &c4, &c5];
+        let result = mandel_hk(&configs, 0.05);
+        assert!(result.is_ok());
+    }
 }
