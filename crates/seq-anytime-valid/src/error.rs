@@ -26,4 +26,8 @@ pub enum SeqError {
     InvalidNullProportion(f64),
     #[error("Beta shape parameter must be positive, got a={a}, b={b}")]
     InvalidBetaParams { a: f64, b: f64 },
+    #[error("grid size must be >= 10, got {0}")]
+    InvalidGridSize(usize),
+    #[error("betting observation must be in [0, 1], got {0}")]
+    InvalidBettingObservation(f64),
 }

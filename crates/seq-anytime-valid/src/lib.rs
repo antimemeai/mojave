@@ -16,6 +16,7 @@ pub use evidence::e_value::{e_to_p, product_e_value, threshold_decision};
 pub use evidence::msprt::{always_valid_p, bernoulli_always_valid_p};
 pub use monitor::anytime::AnytimeMonitor;
 pub use monitor::bernoulli::BernoulliMonitor;
+pub use monitor::betting::BettingMonitor;
 pub use monitor::group_seq::{compute_boundaries, GroupSeqMonitor};
 pub use monitor::sprt::{sprt_decide, SprtMonitor};
 pub use practical::practical_significance_p;
