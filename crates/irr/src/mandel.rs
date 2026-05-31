@@ -16,6 +16,8 @@ pub enum MandelError {
     EmptyConfiguration { index: usize },
     #[error("all configurations must have at least 2 replicates for k statistic")]
     InsufficientReplicates,
+    #[error("ISO 5725 requires balanced design — all configurations must have equal replicate count")]
+    UnbalancedDesign,
     #[error("zero variance across configuration means; h is undefined")]
     ZeroVarianceBetween,
     #[error("zero pooled within-configuration variance; k is undefined")]
@@ -73,9 +75,12 @@ pub fn mandel_hk(configs: &[&[f64]], alpha: f64) -> Result<MandelStatistics, Man
         }
     }
 
-    // Check all have >= 2 replicates for k
-    let all_have_replicates = configs.iter().all(|c| c.len() >= 2);
-    if !all_have_replicates {
+    // ISO 5725 assumes balanced design — all configs must have equal replicate count
+    let n = configs[0].len();
+    if !configs.iter().all(|c| c.len() == n) {
+        return Err(MandelError::UnbalancedDesign);
+    }
+    if n < 2 {
         return Err(MandelError::InsufficientReplicates);
     }
 
