@@ -7,6 +7,7 @@ pub mod instrument;
 pub mod instruments;
 pub mod monitor;
 pub mod outcome_ext;
+pub mod qmu;
 pub mod router;
 pub mod types;
 
