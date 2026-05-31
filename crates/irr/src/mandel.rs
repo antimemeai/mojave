@@ -16,7 +16,9 @@ pub enum MandelError {
     EmptyConfiguration { index: usize },
     #[error("all configurations must have at least 2 replicates for k statistic")]
     InsufficientReplicates,
-    #[error("ISO 5725 requires balanced design — all configurations must have equal replicate count")]
+    #[error(
+        "ISO 5725 requires balanced design — all configurations must have equal replicate count"
+    )]
     UnbalancedDesign,
     #[error("zero variance across configuration means; h is undefined")]
     ZeroVarianceBetween,
@@ -114,7 +116,10 @@ pub fn mandel_hk(configs: &[&[f64]], alpha: f64) -> Result<MandelStatistics, Man
     }
 
     // Mandel h: (mean_i - grand_mean) / s_between
-    let h: Vec<f64> = means.iter().map(|&m| (m - grand_mean) / s_between).collect();
+    let h: Vec<f64> = means
+        .iter()
+        .map(|&m| (m - grand_mean) / s_between)
+        .collect();
 
     // Pooled within-configuration standard deviation
     // s_pooled = sqrt(mean of variances) -- uses equal-weight pooling (ISO 5725)
@@ -175,7 +180,8 @@ fn mandel_h_critical(p: usize, alpha: f64) -> f64 {
     // Approximate t-quantile via normal approximation with df correction
     let z = normal_quantile(1.0 - a);
     // Cornish-Fisher approximation for t from z
-    let t_crit = z + (z.powi(3) + z) / (4.0 * df)
+    let t_crit = z
+        + (z.powi(3) + z) / (4.0 * df)
         + (5.0 * z.powi(5) + 16.0 * z.powi(3) + 3.0 * z) / (96.0 * df.powi(2));
 
     let pf = p as f64;

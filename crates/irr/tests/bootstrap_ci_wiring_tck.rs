@@ -172,16 +172,10 @@ fn then_wider_ci(world: &mut CiWiringWorld) {
     let r99 = world.ci_99.as_ref().expect("no 99% CI");
     let w90 = r90.ci_upper.unwrap() - r90.ci_lower.unwrap();
     let w99 = r99.ci_upper.unwrap() - r99.ci_lower.unwrap();
-    assert!(
-        w99 >= w90 - 1e-10,
-        "99% width {} < 90% width {}",
-        w99,
-        w90
-    );
+    assert!(w99 >= w90 - 1e-10, "99% width {} < 90% width {}", w99, w90);
 }
 
 fn main() {
-    let runner =
-        CiWiringWorld::run(concat!(env!("CARGO_MANIFEST_DIR"), "/../../tck/irr"));
+    let runner = CiWiringWorld::run(concat!(env!("CARGO_MANIFEST_DIR"), "/../../tck/irr"));
     futures::executor::block_on(runner);
 }

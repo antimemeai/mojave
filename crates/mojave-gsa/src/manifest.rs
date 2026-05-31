@@ -70,7 +70,15 @@ pub fn generate_manifest(
     seed: [u8; 32],
     output_path: &Path,
 ) -> Result<()> {
-    generate_manifest_with_options(axes_config_path, task, model, n_base, seed, false, output_path)
+    generate_manifest_with_options(
+        axes_config_path,
+        task,
+        model,
+        n_base,
+        seed,
+        false,
+        output_path,
+    )
 }
 
 pub fn generate_manifest_with_options(

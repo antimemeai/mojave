@@ -222,7 +222,11 @@ pub fn kappa_with_ci(
     let point = kappa_from_matrix(matrix)?;
     let ci = bootstrap_ci(
         matrix,
-        |m| kappa_from_matrix(m).map(|r| r.value).map_err(|e| e.to_string()),
+        |m| {
+            kappa_from_matrix(m)
+                .map(|r| r.value)
+                .map_err(|e| e.to_string())
+        },
         n_resamples,
         confidence_level,
         seed,

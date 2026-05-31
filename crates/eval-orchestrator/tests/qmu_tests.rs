@@ -82,7 +82,11 @@ fn cr_monotone_increasing_with_margin() {
     let estimates = [0.65, 0.70, 0.75, 0.80, 0.85];
     let crs: Vec<f64> = estimates
         .iter()
-        .map(|&e| QmuAssessment::evaluate(e, 0.04, 0.70, None).unwrap().confidence_ratio)
+        .map(|&e| {
+            QmuAssessment::evaluate(e, 0.04, 0.70, None)
+                .unwrap()
+                .confidence_ratio
+        })
         .collect();
     for w in crs.windows(2) {
         assert!(
@@ -99,7 +103,11 @@ fn cr_monotone_decreasing_with_uncertainty() {
     let uncertainties = [0.02, 0.04, 0.06, 0.08];
     let crs: Vec<f64> = uncertainties
         .iter()
-        .map(|&u| QmuAssessment::evaluate(0.80, u, 0.70, None).unwrap().confidence_ratio)
+        .map(|&u| {
+            QmuAssessment::evaluate(0.80, u, 0.70, None)
+                .unwrap()
+                .confidence_ratio
+        })
         .collect();
     for w in crs.windows(2) {
         assert!(
@@ -247,9 +255,7 @@ fn from_pipeline_matches_evaluate() {
     let from_pipe = QmuAssessment::from_pipeline(&summary, 0.70, Some(0.02)).unwrap();
     let direct = QmuAssessment::evaluate(0.80, 0.05, 0.70, Some(0.02)).unwrap();
     assert!((from_pipe.estimate - direct.estimate).abs() < 1e-10);
-    assert!(
-        (from_pipe.expanded_uncertainty - direct.expanded_uncertainty).abs() < 1e-10
-    );
+    assert!((from_pipe.expanded_uncertainty - direct.expanded_uncertainty).abs() < 1e-10);
     assert!((from_pipe.margin - direct.margin).abs() < 1e-10);
     assert!((from_pipe.confidence_ratio - direct.confidence_ratio).abs() < 1e-10);
     assert_eq!(
