@@ -20,7 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from audit import emit as audit
+from audit_emit import emit as audit
 
 VARIANT_TIMEOUT = 1800
 MAX_RETRIES = 2

@@ -1,31 +1,36 @@
-# Peer A: Statistical Correctness
+# Peer B: Audit Chain Trust
 
-**You are Peer A.** You own Stream A of the advisory execution plan.
+**You are Peer B.** You own Stream B of the advisory execution plan.
 
 ## Your mission
 
-Fix the confidence sequence pipeline — it currently produces 46% coverage instead of 95% for Bernoulli data. This is the critical path: Streams C and D are blocked until you finish.
+Harden the audit chain trust model. Retire the broken Python audit writer, set up CI/CD, add Sigstore binary signing, write the canonical encoding spec.
 
 ## Your scope (files you own)
 
-- `crates/seq-anytime-valid/` — AnytimeMonitor, BernoulliMonitor, types
-- `crates/eval-orchestrator/src/instruments/sequential.rs` — SequentialInstrument
-- `crates/mojave-gsa/src/analyze.rs` — data quality gate only
-- `crates/mojave-gsa/src/diagnostics.rs` — convergence diagnostics (new file)
-- `tck/seq-anytime-valid/` — new TCK scenarios
+- `scripts/audit.py` — to be deleted
+- `scripts/tests/test_audit.py` — rewrite for subprocess-based testing
+- `scripts/v2/*.py` — any files that import audit.py
+- `.github/workflows/` — new CI/CD pipeline (new directory)
+- `crates/audit-sign/src/rekor.rs` — Rekor witnessing (new file)
+- `crates/mojave-cli/src/commands/audit.rs` — add witness subcommand
+- `docs/adr/` — canonical encoding spec
 
 ## Your tasks (in order)
 
-1. **A1: Fix AnytimeMonitor sigma for Bernoulli** — dispatch on DataFamily, use sigma=0.5 for Bernoulli
-2. **A2: Fix SequentialInstrument** — use DataFamily::Bernoulli for binary outcomes
-3. **A3: Gate 4 Monte Carlo test** — 10,000 reps × 5 p-values through AnytimeMonitor::update()
-4. **A4: Data quality gate** — reject n_samples=0 cells in Sobol analysis
-5. **A5: Convergence diagnostics** — warn on negative S1, CI crossing bounds, sum_ST > 1.3
-6. **A6: Waudby-Smith betting CS** — correct long-term solution (needs lit review of paper)
+1. **B1: Retire Python audit writer** — find all callers of audit.py, replace with `mojave audit emit` subprocess calls, delete audit.py, fix cross-language test
+2. **B2: CI/CD pipeline** — create `.github/workflows/ci.yml` with clippy + fmt + test
+3. **B3: Sigstore binary signing** — create `.github/workflows/release.yml` with cosign
+4. **B4: Canonical encoding spec** — ADR documenting the exact JSON encoding rules
+5. **B5: Rekor witnessing** — submit chain-head snapshots to Rekor (Tier 3)
+6. **B6: Key management upgrade** — document the gap in an ADR (Tier 3, design only)
 
-## The bug
+## Key context
 
-`crates/seq-anytime-valid/src/monitor/anytime.rs` lines 68-74: AnytimeMonitor computes sigma via Welford's online variance regardless of DataFamily. For Bernoulli data, this voids the anytime-valid guarantee. The existing Gate 4 test (`tests/gate4_monte_carlo.rs`) tests `normal_mixture_cs_known_sigma` — NOT the production AnytimeMonitor path.
+- `scripts/audit.py` writes JSONL chains that are format-incompatible with the Rust verifier post-genesis-sentinel merge (lacks tagged-union genesis format, model identity binding)
+- The cross-language test at `scripts/tests/test_audit.py:223` uses `pytest.skip` when no Rust binary is found — it has likely never passed against current code
+- There is no `.github/workflows/` directory — CI does not exist yet
+- Pre-commit hooks enforce clippy zero warnings + rustfmt
 
 ## Methodology
 
@@ -33,12 +38,12 @@ JSMNTL: TCK red → compile/run red → implement → green → code review. Com
 
 ## Full plan
 
-Read `docs/plans/2026-05-30-advisory-execution.md` — Stream A section — for complete task details with code.
+Read `docs/plans/2026-05-30-advisory-execution.md` — Stream B section — for complete task details.
 
-## When you're done
+## Dependencies
 
-Signal completion by creating a file `STREAM_A_COMPLETE.md` at repo root with a summary of what was done and test results. This unblocks Peers C and D.
+None — you are fully independent. Start immediately.
 
 ## Branch
 
-You are on `stream-a/statistical-correctness`. Commit frequently. Do not touch files outside your scope.
+You are on `stream-b/audit-chain`. Commit frequently. Do not touch files outside your scope.
