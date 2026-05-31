@@ -73,7 +73,7 @@ pub fn run_diagnostics(
         }
 
         let s1_width = entry.s1_ci_high - entry.s1_ci_low;
-        if entry.s1.abs() > 1e-10 && s1_width / entry.s1.abs() > config.ci_width_ratio_threshold {
+        if entry.s1.abs() > 0.01 && s1_width / entry.s1.abs() > config.ci_width_ratio_threshold {
             diagnostics.push(SobolDiagnosticEntry {
                 factor: entry.axis.clone(),
                 kind: DiagnosticKind::CiWidthExceedsThreshold,
@@ -218,6 +218,30 @@ mod tests {
                 .iter()
                 .any(|d| d.kind == DiagnosticKind::RecommendDoubleN),
             "expected RecommendDoubleN: {diags:?}"
+        );
+    }
+
+    #[test]
+    fn near_zero_s1_does_not_trigger_ci_width_warning() {
+        // S1 ~ 0.001 is negligible; even though CI width is large relative to S1,
+        // it should NOT trigger a CI width warning (threshold raised to 0.01).
+        let indices = vec![make_entry(
+            "negligible_factor",
+            0.001,
+            (-0.02, 0.02),
+            0.003,
+            (0.001, 0.005),
+        )];
+        let config = DiagnosticConfig {
+            ci_width_ratio_threshold: 0.10,
+            ..Default::default()
+        };
+        let diags = run_diagnostics(&indices, &config);
+        assert!(
+            !diags
+                .iter()
+                .any(|d| d.kind == DiagnosticKind::CiWidthExceedsThreshold),
+            "negligible S1 should not trigger CiWidthExceedsThreshold: {diags:?}"
         );
     }
 
