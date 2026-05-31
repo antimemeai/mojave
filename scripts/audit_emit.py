@@ -17,6 +17,7 @@ is a silent no-op. Audit emission must never block eval execution.
 from __future__ import annotations
 
 import json
+import math
 import shutil
 import subprocess
 import sys
@@ -157,6 +158,9 @@ def _sanitize_detail(detail: dict[str, object] | None) -> dict[str, object] | No
 def _sanitize_value(value: object) -> object:
     """Recursively convert floats to strings."""
     if isinstance(value, float):
+        # Guard against NaN/Inf before int comparison (which would raise ValueError)
+        if not math.isfinite(value):
+            return str(value)
         # Convert to int if it's a whole number, otherwise to string
         if value == int(value):
             return int(value)

@@ -63,6 +63,31 @@ class TestSanitizeDetail:
     def test_bool_passthrough(self) -> None:
         assert _sanitize_value(True) is True
 
+    def test_nan_to_string(self) -> None:
+        result = _sanitize_value(float("nan"))
+        assert isinstance(result, str)
+        assert result == "nan"
+
+    def test_inf_to_string(self) -> None:
+        result = _sanitize_value(float("inf"))
+        assert isinstance(result, str)
+        assert result == "inf"
+
+    def test_neg_inf_to_string(self) -> None:
+        result = _sanitize_value(float("-inf"))
+        assert isinstance(result, str)
+        assert result == "-inf"
+
+    def test_nan_in_nested_dict(self) -> None:
+        result = _sanitize_value({"a": float("nan"), "b": 1.5})
+        assert isinstance(result["a"], str)
+        assert result["b"] == "1.5"
+
+    def test_inf_in_list(self) -> None:
+        result = _sanitize_value([float("inf"), 2.0])
+        assert result[0] == "inf"
+        assert result[1] == 2
+
 
 class TestEmitFunction:
     """Test the emit() wrapper's behavior without a binary."""
