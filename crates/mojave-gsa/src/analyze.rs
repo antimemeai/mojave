@@ -137,7 +137,7 @@ pub fn analyze(
     manifest_path: &Path,
     results_path: &Path,
     bootstrap_resamples: usize,
-    _confidence_level: f64,
+    confidence_level: f64,
     seed: [u8; 32],
     output_path: &Path,
 ) -> Result<()> {
@@ -215,12 +215,14 @@ pub fn analyze(
     };
 
     // Use salib-rs canonical Sobol estimation with bootstrap CIs.
+    let alpha = 1.0 - confidence_level;
     let mut bootstrap_rng = RngState::from_seed(seed);
     let sobol_with_ci = estimate_saltelli2010_from_outputs_with_bootstrap(
         &fa,
         &fb,
         &fab,
         bootstrap_resamples,
+        alpha,
         &mut bootstrap_rng,
     );
     let s1 = &sobol_with_ci.indices.first_order;
