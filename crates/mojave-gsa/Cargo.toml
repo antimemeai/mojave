@@ -12,6 +12,7 @@ name = "mojave-gsa"
 path = "src/main.rs"
 
 [dependencies]
+# path dep until salib 0.2 published (from_outputs APIs + alpha parameter)
 salib-core = { path = "../../../salib/crates/salib-core" }
 salib-samplers = { path = "../../../salib/crates/salib-samplers" }
 salib-estimators = { path = "../../../salib/crates/salib-estimators" }
