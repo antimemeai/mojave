@@ -29,7 +29,13 @@ impl SequentialInstrument {
 
         let mut monitor = match AnytimeMonitor::new(msprt_config, config.sequential.alpha) {
             Ok(m) => m,
-            Err(_) => return (Vec::new(), None),
+            Err(e) => {
+                eprintln!(
+                    "[sequential] AnytimeMonitor::new failed for series {:?}: {e}",
+                    series
+                );
+                return (Vec::new(), None);
+            }
         };
 
         let mut last_snapshot = None;
@@ -37,7 +43,13 @@ impl SequentialInstrument {
             let value = outcome_to_f64(&record.outcome);
             match monitor.update(value) {
                 Ok(snap) => last_snapshot = Some(snap),
-                Err(_) => continue,
+                Err(e) => {
+                    eprintln!(
+                        "[sequential] monitor.update failed for series {:?}: {e}",
+                        series
+                    );
+                    continue;
+                }
             }
         }
 
