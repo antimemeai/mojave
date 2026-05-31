@@ -34,9 +34,8 @@ fn bernoulli_uses_fixed_sigma() {
     // The Bernoulli monitor should use sigma=0.5, producing wider intervals than
     // a Normal monitor that estimates sigma from the low-variance 0/1 data.
     let alpha = 0.05;
-    let data: Vec<f64> = std::iter::repeat(1.0)
-        .take(90)
-        .chain(std::iter::repeat(0.0).take(10))
+    let data: Vec<f64> = std::iter::repeat_n(1.0, 90)
+        .chain(std::iter::repeat_n(0.0, 10))
         .collect();
 
     let ci_bernoulli = run_monitor(DataFamily::Bernoulli, &data, alpha);
@@ -67,12 +66,13 @@ fn bernoulli_ci_width_is_deterministic() {
     let alpha = 0.05;
 
     // Dataset 1: p ~ 0.5 (high variance)
-    let data1: Vec<f64> = (0..100).map(|i| if i % 2 == 0 { 1.0 } else { 0.0 }).collect();
+    let data1: Vec<f64> = (0..100)
+        .map(|i| if i % 2 == 0 { 1.0 } else { 0.0 })
+        .collect();
 
     // Dataset 2: p ~ 0.9 (low variance)
-    let data2: Vec<f64> = std::iter::repeat(1.0)
-        .take(90)
-        .chain(std::iter::repeat(0.0).take(10))
+    let data2: Vec<f64> = std::iter::repeat_n(1.0, 90)
+        .chain(std::iter::repeat_n(0.0, 10))
         .collect();
 
     let ci1 = run_monitor(DataFamily::Bernoulli, &data1, alpha);
@@ -114,7 +114,9 @@ fn normal_unknown_variance_uses_welford() {
     let alpha = 0.05;
 
     // For high-variance data, estimated sigma should be close to the true sigma
-    let data: Vec<f64> = (0..200).map(|i| if i % 2 == 0 { 5.0 } else { -5.0 }).collect();
+    let data: Vec<f64> = (0..200)
+        .map(|i| if i % 2 == 0 { 5.0 } else { -5.0 })
+        .collect();
 
     let ci_est = run_monitor(
         DataFamily::Normal {
