@@ -1,10 +1,11 @@
 use crate::error::SeqError;
-use crate::types::{EvidenceSnapshot, MsprtConfig};
+use crate::types::{DataFamily, EvidenceSnapshot, MsprtConfig};
 
 pub struct AnytimeMonitor {
     theta_0: f64,
     mixing_variance: f64,
     alpha: f64,
+    data_family: DataFamily,
     n: usize,
     /// Running sum of (x_i - theta_0).
     running_sum: f64,
@@ -26,6 +27,7 @@ impl AnytimeMonitor {
             theta_0: config.theta_0,
             mixing_variance: config.mixing_variance,
             alpha,
+            data_family: config.family,
             n: 0,
             running_sum: 0.0,
             raw_sum: 0.0,
@@ -64,12 +66,27 @@ impl AnytimeMonitor {
         let avp = (1.0 / lr).min(1.0);
 
         // Confidence sequence: xbar ± sigma * sqrt(2*(1+1/n)*ln(sqrt(n+1)/alpha)/n)
-        let variance = if self.n > 1 {
-            self.welford_m2 / n_f
-        } else {
-            0.0
+        //
+        // Sigma selection dispatches on DataFamily:
+        //   - Bernoulli: sigma=0.5 (conservative upper bound; max std dev for Bernoulli)
+        //   - Normal(known_variance=Some(v)): sigma = sqrt(v)
+        //   - Normal(known_variance=None): Welford online estimate (no anytime-valid guarantee)
+        let sigma = match self.data_family {
+            DataFamily::Bernoulli => 0.5,
+            DataFamily::Normal {
+                known_variance: Some(v),
+            } => v.sqrt().max(1e-10),
+            DataFamily::Normal {
+                known_variance: None,
+            } => {
+                let variance = if self.n > 1 {
+                    self.welford_m2 / n_f
+                } else {
+                    0.0
+                };
+                variance.sqrt().max(1e-10)
+            }
         };
-        let sigma = variance.sqrt().max(1e-10);
         let width =
             sigma * (2.0 * (1.0 + 1.0 / n_f) * ((n_f + 1.0).sqrt() / self.alpha).ln() / n_f).sqrt();
         let raw_mean = self.raw_sum / n_f;
@@ -90,7 +107,6 @@ mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
 
     use super::*;
-    use crate::types::DataFamily;
 
     #[test]
     fn anytime_monitor_tracks_evidence() {

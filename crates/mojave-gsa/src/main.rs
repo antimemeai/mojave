@@ -2,6 +2,7 @@
 
 mod analyze;
 mod confseq;
+mod diagnostics;
 mod manifest;
 
 use std::path::PathBuf;

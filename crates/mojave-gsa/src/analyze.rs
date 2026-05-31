@@ -27,6 +27,7 @@ struct ResultsInput {
 struct ResultCell {
     saltelli_index: usize,
     accuracy: Option<f64>,
+    n_samples: Option<usize>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -64,6 +65,7 @@ pub struct AnalysisOutput {
     pub sobol_indices: Vec<SobolIndexEntry>,
     pub borgonovo_indices: Vec<BorgonovoIndexEntry>,
     pub sobol_diagnostics: SobolDiagnostics,
+    pub convergence_diagnostics: Vec<crate::diagnostics::SobolDiagnosticEntry>,
 }
 
 #[derive(Debug, Serialize)]
@@ -247,6 +249,19 @@ pub fn analyze(
     let mut cells_sorted = results.cells;
     cells_sorted.sort_by_key(|c| c.saltelli_index);
 
+    let zero_sample_indices: Vec<usize> = cells_sorted
+        .iter()
+        .filter(|c| c.n_samples == Some(0))
+        .map(|c| c.saltelli_index)
+        .collect();
+    anyhow::ensure!(
+        zero_sample_indices.is_empty(),
+        "{count} cells have n_samples=0, corrupting variance decomposition. \
+         Affected saltelli_indices: {indices:?}",
+        count = zero_sample_indices.len(),
+        indices = zero_sample_indices,
+    );
+
     let mut y = Vec::with_capacity(expected_cells);
     for (i, cell) in cells_sorted.iter().enumerate() {
         anyhow::ensure!(
@@ -361,6 +376,11 @@ pub fn analyze(
     let sum_s1: f64 = s1.iter().sum();
     let sum_st: f64 = st.iter().sum();
 
+    let convergence_diags = crate::diagnostics::run_diagnostics(
+        &sobol_entries,
+        &crate::diagnostics::DiagnosticConfig::default(),
+    );
+
     let output = AnalysisOutput {
         eval: results.eval,
         model: results.model,
@@ -383,6 +403,7 @@ pub fn analyze(
             sum_s1: round4(sum_s1),
             sum_st: round4(sum_st),
         },
+        convergence_diagnostics: convergence_diags,
     };
 
     if let Some(parent) = output_path.parent() {
@@ -404,6 +425,15 @@ pub fn analyze(
             "    Dominant factor: {} (ST={:.4})",
             dominant.axis, dominant.st
         );
+    }
+    if !output.convergence_diagnostics.is_empty() {
+        eprintln!(
+            "    Convergence warnings: {}",
+            output.convergence_diagnostics.len()
+        );
+        for d in &output.convergence_diagnostics {
+            eprintln!("      - {}", d.message);
+        }
     }
     eprintln!("    -> {}", output_path.display());
 
@@ -692,6 +722,69 @@ mod tests {
             msg.contains("missing"),
             "error should mention missing: {msg}"
         );
+    }
+
+    #[test]
+    fn test_zero_n_samples_rejected() {
+        let (_axes, manifest, _results) = generate_test_inputs();
+        let manifest_text = fs::read_to_string(manifest.path()).unwrap();
+        let mf: serde_json::Value = serde_json::from_str(&manifest_text).unwrap();
+        let total_cells = mf["total_cells"].as_u64().unwrap() as usize;
+
+        let mut cells = Vec::new();
+        for i in 0..total_cells {
+            let n_samples = if i == 3 || i == 7 || i == 11 { 0 } else { 50 };
+            cells.push(serde_json::json!({
+                "saltelli_index": i,
+                "accuracy": 0.5,
+                "n_samples": n_samples,
+                "cell_id": format!("c{i:05}")
+            }));
+        }
+        let bad_results = serde_json::json!({
+            "eval": "test", "model": "test",
+            "cells": cells, "item_matrix": {}
+        });
+        let mut bad_file = NamedTempFile::new().unwrap();
+        bad_file
+            .write_all(serde_json::to_string(&bad_results).unwrap().as_bytes())
+            .unwrap();
+        bad_file.flush().unwrap();
+
+        let output = NamedTempFile::new().unwrap();
+        let err = analyze(
+            manifest.path(),
+            bad_file.path(),
+            100,
+            0.95,
+            default_seed(),
+            output.path(),
+        );
+        assert!(err.is_err());
+        let msg = format!("{}", err.err().unwrap());
+        assert!(
+            msg.contains("n_samples=0"),
+            "error should mention n_samples=0: {msg}"
+        );
+        assert!(
+            msg.contains("3 cells"),
+            "error should report count of 3: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_n_samples_absent_passes() {
+        let (_axes, manifest, results) = generate_test_inputs();
+        let output = NamedTempFile::new().unwrap();
+        let result = analyze(
+            manifest.path(),
+            results.path(),
+            100,
+            0.95,
+            default_seed(),
+            output.path(),
+        );
+        assert!(result.is_ok(), "absent n_samples should not trigger gate");
     }
 
     #[test]
