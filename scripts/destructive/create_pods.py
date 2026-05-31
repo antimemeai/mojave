@@ -21,7 +21,7 @@ import runpod
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from audit import emit as audit
+from audit_emit import emit as audit
 from profiles import load_profile
 
 PODS_FILE = Path("data/destructive/pods.json")
