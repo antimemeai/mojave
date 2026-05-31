@@ -116,6 +116,14 @@
   \textbf{Quantization comparison.} bf16 vs.\ fp8 differences are computed
   from the Saltelli matrix cells, not matched-pair item-level scoring. The
   comparison reflects overall accuracy shift under the perturbation design.}}{}
+\@ifundefined{rc@@\detokenize{disc.nist800}}{\rcset{disc.nist800}{%
+  \textbf{NIST AI 800-3 alignment.} The conformity assessment maps mojave
+  outputs to NIST measurement science concepts (Keller et al.\ 2026).
+  QMU confidence ratio thresholds are \emph{not} empirically calibrated
+  for AI evaluation --- they are reported for transparency, not as
+  calibrated decision boundaries. The JCGM 106 guard band mechanism
+  is the primary accept/reject decision rule and does not depend on
+  CR threshold calibration.}}{}
 \makeatother
 
 % ============================================================================
@@ -201,6 +209,52 @@
 \fact{Borgonovo $\delta$}{\rc{borgonovo.table}}
 \end{rcfacts}
 
+% ------------------------------------------------ NIST AI 800-3 ALIGNMENT ----
+% Keller et al. 2026: Measurement science concepts mapped to mojave outputs.
+% This section provides traceability from NIST AI 800-3 measurement framework
+% concepts to the concrete quantities reported in this run card.
+\section{NIST AI 800-3 Alignment}
+\begin{rcfacts}
+\fact{Benchmark accuracy}{%
+  Point estimate with anytime-valid confidence interval.\\[2pt]
+  \rc{acc.overall} \quad 95\% CI: [\rc{nist.ci.lo},\,\rc{nist.ci.hi}]\\[2pt]
+  \textcolor{rcmute}{\footnotesize Method: normal-mixture confidence sequence
+  (Howard et al.\ 2021), $\alpha = \rc{nist.alpha}$}}
+\fact{Statistical model}{%
+  Measurement equation: $Y_{ij} = f(\theta, \text{items}, \text{perturbation}) + \varepsilon$\\[2pt]
+  \textcolor{rcmute}{\footnotesize Perturbation factors: \rc{perturb.axes}}\\[2pt]
+  \textcolor{rcmute}{\footnotesize Variance decomposition via Sobol' indices
+  identifies which perturbation axes contribute to score variability.}}
+\fact{Sensitivity profile}{%
+  Sobol' first-order indices decompose total variance by factor.\\[2pt]
+  \rc{sobol.table}\\[2pt]
+  \textcolor{rcmute}{\footnotesize The sensitivity profile quantifies what
+  fraction of benchmark variability is attributable to each perturbation
+  axis. High sensitivity to construct-irrelevant factors (e.g., prompt
+  template, quantization) indicates measurement noise.}\\[2pt]
+  \textcolor{rcmute}{\footnotesize Note: this is a variance proportion, not
+  a formal validity coefficient in the Borsboom (2005) causal sense.}}
+\fact{Conformity assessment}{%
+  QMU decision per JCGM 106:2012 with guard band.\\[2pt]
+  CR $= \rc{nist.qmu.cr}$ \quad
+  Margin $= \rc{nist.qmu.margin}$ \quad
+  $U = \rc{nist.qmu.uncertainty}$\\[2pt]
+  Decision: \rc{nist.qmu.decision}\\[2pt]
+  \textcolor{rcmute}{\footnotesize Guard band: \rc{nist.qmu.guard.band}
+  (consumer risk $< \rc{nist.qmu.consumer.risk}$)}\\[2pt]
+  \textcolor{rcmute}{\footnotesize \textbf{Calibration status:} CR
+  thresholds are not empirically calibrated for AI evaluation contexts.
+  The guard band decision rule is framework-agnostic (JCGM 106) and
+  does not depend on CR threshold calibration.}}
+\fact{Measurement uncertainty}{%
+  Expanded uncertainty $U = k \cdot u$ where $k = \rc{nist.coverage.factor}$
+  (coverage factor).\\[2pt]
+  \textcolor{rcmute}{\footnotesize Combined standard uncertainty $u$ derived
+  from confidence sequence half-width at the reported sample size.
+  Components: sampling variability (dominant), plus perturbation-induced
+  variability quantified by Sobol' total-order indices.}}
+\end{rcfacts}
+
 % ------------------------------------------------ QUANTIZATION COMPARISON ----
 \section{Quantization Comparison \textnormal{\small(bf16 vs.\ fp8)}}
 \begin{rcfacts}
@@ -227,6 +281,7 @@
   \item \rc{disc.saltelli}
   \item \rc{disc.singlemodel}
   \item \rc{disc.quantcompare}
+  \item \rc{disc.nist800}
 \end{itemize}
 
 % ------------------------------------------------------- AUDIT TRAIL ----
