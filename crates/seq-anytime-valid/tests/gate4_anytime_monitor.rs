@@ -58,6 +58,58 @@ fn anytime_monitor_bernoulli_coverage_gate4() {
     }
 }
 
+/// Gate 4: Type I error control test for AnytimeMonitor.
+///
+/// Under H0 (true_p == theta_0 == 0.5), the e-value should exceed
+/// 1/alpha in at most alpha fraction of replications. This verifies
+/// that the test does not falsely reject when the null is true.
+#[test]
+fn anytime_monitor_bernoulli_type1_error_gate4() {
+    let alpha = 0.05;
+    let n_reps = 10_000;
+    let n_obs = 200;
+    let true_p = 0.5;
+    let theta_0 = 0.5;
+    let threshold = 1.0 / alpha; // e-value threshold for rejection
+
+    let mut false_rejections = 0u32;
+    let dist = Bernoulli::new(true_p).unwrap();
+
+    for rep in 0..n_reps {
+        let seed = 7_000_000 + rep as u64;
+        let mut rng = StdRng::seed_from_u64(seed);
+
+        let config = MsprtConfig {
+            theta_0,
+            mixing_variance: 1.0,
+            family: DataFamily::Bernoulli,
+            max_samples: None,
+        };
+        let mut monitor = AnytimeMonitor::new(config, alpha).unwrap();
+
+        let mut max_e_value = 0.0_f64;
+        for _ in 0..n_obs {
+            let obs = if dist.sample(&mut rng) { 1.0 } else { 0.0 };
+            let snap = monitor.update(obs).unwrap();
+            if let Some(e) = snap.e_value {
+                max_e_value = max_e_value.max(e);
+            }
+        }
+
+        if max_e_value >= threshold {
+            false_rejections += 1;
+        }
+    }
+
+    let false_rejection_rate = false_rejections as f64 / n_reps as f64;
+    // By Ville's inequality, the false rejection rate should be <= alpha.
+    // Allow a small margin for simulation noise.
+    assert!(
+        false_rejection_rate <= alpha + 0.02,
+        "Type I error rate {false_rejection_rate:.4} exceeds alpha={alpha} + margin"
+    );
+}
+
 /// Verify that AnytimeMonitor Bernoulli CI width shrinks with more data.
 /// This catches degenerate intervals that never tighten.
 #[test]
